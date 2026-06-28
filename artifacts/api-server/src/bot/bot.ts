@@ -753,6 +753,28 @@ async function registerCommands(client: Client) {
       .addStringOption((o) =>
         o.setName("amount").setDescription("Total price, e.g. 1m, 500k, 1.5b, or 250000").setRequired(false),
       ),
+    new SlashCommandBuilder()
+      .setName("addspawner")
+      .setDescription("Set the in-stock amount for a spawner type (owner/co-owner only)")
+      .addStringOption((o) =>
+        o
+          .setName("spawner")
+          .setDescription("Spawner type")
+          .setRequired(true)
+          .addChoices(
+            { name: "Skeleton",   value: "skeleton"  },
+            { name: "Iron Golem", value: "irongolem" },
+            { name: "Blaze",      value: "blaze"     },
+            { name: "Pig",        value: "pig"       },
+            { name: "Cow",        value: "cow"       },
+            { name: "Spider",     value: "spider"    },
+            { name: "Piglin",     value: "piglin"    },
+            { name: "Creeper",    value: "creeper"   },
+          ),
+      )
+      .addIntegerOption((o) =>
+        o.setName("amount").setDescription("Amount currently in stock").setRequired(true).setMinValue(0),
+      ),
   ].map((c) => c.toJSON());
 
   try {
@@ -1342,6 +1364,28 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     return;
   }
 
+  if (commandName === "addspawner") {
+    const member = i.member as GuildMember;
+    if (!isOwnerOrCoOwner(member)) {
+      await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can update spawner stock.")], flags: 64 });
+      return;
+    }
+    const spawnerKey  = i.options.getString("spawner", true);
+    const amount      = i.options.getInteger("amount", true);
+    storage.setSpawnerStock(spawnerKey, amount);
+    const entry = SPAWNER_KEYS.find((s) => s.key === spawnerKey);
+    const label = entry ? entry.label : spawnerKey;
+    await i.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(SUCCESS_COLOR)
+          .setDescription(`✅ **${label}** — Amount in stock: **${amount}**`),
+      ],
+      flags: 64,
+    });
+    return;
+  }
+
   if (commandName === "close") {
     if (!channel || !guild) return;
     const ticket = storage.getTicket(channel.id);
@@ -1755,7 +1799,7 @@ async function handleButton(i: ButtonInteraction) {
         return;
       }
       await i.reply({
-        embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${SKELLY_PRICE_TEXT}\n\nChoose an option below:`)],
+        embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${skellyPriceText()}\n\nChoose an option below:`)],
         components: [
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId("skelly_buy").setLabel("Buy Spawners").setStyle(ButtonStyle.Success),
@@ -2444,7 +2488,7 @@ async function handleStringSelect(i: StringSelectMenuInteraction) {
         return;
       }
       await i.reply({
-        embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${SKELLY_PRICE_TEXT}\n\nChoose an option below:`)],
+        embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${skellyPriceText()}\n\nChoose an option below:`)],
         components: [
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId("skelly_buy").setLabel("Buy Spawners").setStyle(ButtonStyle.Success),
@@ -2470,7 +2514,7 @@ async function handleStringSelect(i: StringSelectMenuInteraction) {
       return;
     }
     await i.reply({
-      embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${SKELLY_PRICE_TEXT}\n\nChoose an option below:`)],
+      embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${skellyPriceText()}\n\nChoose an option below:`)],
       components: [
         new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder().setCustomId("skelly_buy").setLabel("Buy Spawners").setStyle(ButtonStyle.Success),
@@ -3009,7 +3053,7 @@ async function handleModal(i: ModalSubmitInteraction) {
     const welcomeEmbed = new EmbedBuilder()
       .setColor(SKELLY_CATEGORY.color)
       .setTitle(`${isBuying ? "Buying" : "Selling"} Spawners: ${ticketTag(ticketNum)}`)
-      .setDescription(`${SKELLY_PRICE_TEXT}\n\nSee <#1518633695404101773> for more info - [click here](${SKELLY_PRICE_CHANNEL})`)
+      .setDescription(`${skellyPriceText()}\n\nSee <#1518633695404101773> for more info - [click here](${SKELLY_PRICE_CHANNEL})`)
       .addFields(...welcomeFields)
       .setTimestamp();
 
@@ -3316,28 +3360,44 @@ function ticketPanelComponents() {
 
 const SKELLY_PRICE_CHANNEL = "https://discord.com/channels/1450662191890956322/1518633695404101773";
 
-const SKELLY_PRICE_TEXT = [
-  "**Buying:**",
-  "Skeleton: 3.3m each",
-  "Creeper: 3.3m each",
-  "Iron Golem: 5.5m each",
-  "",
-  "**Selling:**",
-  "Skeleton: 3.9m each",
-  "Creeper: 8m each",
-  "Iron Golem: 9m each",
-  "",
-  "**Notes:**",
-  "Our prices are possibly negotiable",
-  "5x5 minimum",
-  "16 spawner minimum",
-].join("\n");
+const SPAWNER_KEYS = [
+  { key: "skeleton",  label: "Skeleton Spawners",   buyPrice: "3.2m" },
+  { key: "irongolem", label: "Iron Golem Spawners",  buyPrice: "5.5m" },
+  { key: "blaze",     label: "Blaze Spawners",       buyPrice: "2m"   },
+  { key: "pig",       label: "Pig Spawners",         buyPrice: "2m"   },
+  { key: "cow",       label: "Cow Spawners",         buyPrice: "2m"   },
+  { key: "spider",    label: "Spider Spawners",      buyPrice: "4m"   },
+  { key: "piglin",    label: "Piglin Spawners",      buyPrice: "5m"   },
+  { key: "creeper",   label: "Creeper Spawners",     buyPrice: "5m"   },
+] as const;
+
+function skellyPriceText(): string {
+  const stock = storage.getAllSpawnerStock();
+  const buyLines = SPAWNER_KEYS.map(({ key, label, buyPrice }) => {
+    const amt = stock[key] ?? 0;
+    return `• ${label} — ${buyPrice} each | Amount: ${amt}`;
+  });
+  return [
+    "**Buying:**",
+    ...buyLines,
+    "",
+    "**Selling:**",
+    "• Skeleton Spawners — 3.9m each",
+    "• Creeper Spawners — 8m each",
+    "• Iron Golem Spawners — 9m each",
+    "",
+    "**Notes:**",
+    "Our prices are possibly negotiable",
+    "5x5 minimum",
+    "16 spawner minimum",
+  ].join("\n");
+}
 
 function skellyTicketPanelEmbed() {
   return new EmbedBuilder()
     .setColor(SKELLY_CATEGORY.color)
     .setTitle("Spawner Prices")
-    .setDescription(`${SKELLY_PRICE_TEXT}\n\nSee <#1518633695404101773> for more details.\nOpen a ticket below to buy or sell.`)
+    .setDescription(`${skellyPriceText()}\n\nSee <#1518633695404101773> for more details.\nOpen a ticket below to buy or sell.`)
     .setTimestamp();
 }
 

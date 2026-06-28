@@ -62,6 +62,7 @@ interface BotData {
   stickers: Record<string, StickerEntry>;
   warns: Record<string, WarnEntry[]>;
   welcomeChannelId: string;
+  spawnerStock: Record<string, number>;
 }
 
 const DATA_FILE = path.resolve(process.cwd(), "bot-data.json");
@@ -85,6 +86,7 @@ function defaultData(): BotData {
     stickers: {},
     warns: {},
     welcomeChannelId: "",
+    spawnerStock: {},
   };
 }
 
@@ -366,5 +368,19 @@ export const storage = {
 
   getWelcomeChannelId(): string {
     return _data.welcomeChannelId ?? "";
+  },
+
+  setSpawnerStock(spawner: string, amount: number): void {
+    if (!_data.spawnerStock) _data.spawnerStock = {};
+    _data.spawnerStock[spawner] = amount;
+    saveData(_data);
+  },
+
+  getSpawnerStock(spawner: string): number {
+    return _data.spawnerStock?.[spawner] ?? 0;
+  },
+
+  getAllSpawnerStock(): Record<string, number> {
+    return _data.spawnerStock ?? {};
   },
 };
