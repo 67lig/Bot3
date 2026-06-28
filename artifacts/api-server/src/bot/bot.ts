@@ -465,7 +465,7 @@ export function createBotClient(): Client | null {
 
   // ─── Vouch Channel Format Enforcer ─────────────────────────────────────────
   const VOUCH_CHANNEL_ID = "1503988954490470461";
-  const VOUCH_REGEX = /^(scam\s*vouch|vouch)\s+<@!?\d+>\s+\S+/i;
+  const VOUCH_REGEX = /^(scam\s*vouch|vouch)\s+<@!?\d+>(\s+\S.*)?$/i;
 
   // Per-channel sticky repost cooldown
   const stickyBusy = new Set<string>();
@@ -603,6 +603,7 @@ export function createBotClient(): Client | null {
           .send(
             `❌ Your message in <#${VOUCH_CHANNEL_ID}> was removed because it didn't follow the correct format.\n\n` +
             `**Correct formats:**\n` +
+            `\`vouch @member\`\n` +
             `\`vouch @member reason\`\n` +
             `\`scam vouch @member reason\`\n` +
             `\`scamvouch @member reason\``,
