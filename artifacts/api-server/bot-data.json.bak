@@ -296,5 +296,8 @@
     }
   },
   "warns": {},
-  "welcomeChannelId": ""
+  "welcomeChannelId": "",
+  "spawnerStock": {
+    "skeleton": 300
+  }
 }

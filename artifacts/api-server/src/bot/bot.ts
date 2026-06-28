@@ -775,6 +775,28 @@ async function registerCommands(client: Client) {
       .addIntegerOption((o) =>
         o.setName("amount").setDescription("Amount currently in stock").setRequired(true).setMinValue(0),
       ),
+    new SlashCommandBuilder()
+      .setName("changeprice")
+      .setDescription("Change the buy price of a spawner type (owner/co-owner only)")
+      .addStringOption((o) =>
+        o
+          .setName("spawner")
+          .setDescription("Spawner type")
+          .setRequired(true)
+          .addChoices(
+            { name: "Skeleton",   value: "skeleton"  },
+            { name: "Iron Golem", value: "irongolem" },
+            { name: "Blaze",      value: "blaze"     },
+            { name: "Pig",        value: "pig"       },
+            { name: "Cow",        value: "cow"       },
+            { name: "Spider",     value: "spider"    },
+            { name: "Piglin",     value: "piglin"    },
+            { name: "Creeper",    value: "creeper"   },
+          ),
+      )
+      .addStringOption((o) =>
+        o.setName("price").setDescription("New buy price, e.g. 3m, 2.5m, 500k").setRequired(true),
+      ),
   ].map((c) => c.toJSON());
 
   try {
@@ -1370,19 +1392,35 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can update spawner stock.")], flags: 64 });
       return;
     }
-    const spawnerKey  = i.options.getString("spawner", true);
-    const amount      = i.options.getInteger("amount", true);
+    const spawnerKey = i.options.getString("spawner", true);
+    const amount     = i.options.getInteger("amount", true);
     storage.setSpawnerStock(spawnerKey, amount);
     const entry = SPAWNER_KEYS.find((s) => s.key === spawnerKey);
     const label = entry ? entry.label : spawnerKey;
     await i.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(SUCCESS_COLOR)
-          .setDescription(`✅ **${label}** — Amount in stock: **${amount}**`),
-      ],
+      embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** — Amount in stock: **${amount}**`)],
       flags: 64,
     });
+    await updateSkellyPanel(client);
+    return;
+  }
+
+  if (commandName === "changeprice") {
+    const member = i.member as GuildMember;
+    if (!isOwnerOrCoOwner(member)) {
+      await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can change spawner prices.")], flags: 64 });
+      return;
+    }
+    const spawnerKey = i.options.getString("spawner", true);
+    const newPrice   = i.options.getString("price", true).trim();
+    storage.setSpawnerBuyPrice(spawnerKey, newPrice);
+    const entry = SPAWNER_KEYS.find((s) => s.key === spawnerKey);
+    const label = entry ? entry.label : spawnerKey;
+    await i.reply({
+      embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** buy price updated to **${newPrice}**`)],
+      flags: 64,
+    });
+    await updateSkellyPanel(client);
     return;
   }
 
@@ -2420,7 +2458,8 @@ async function handleButton(i: ButtonInteraction) {
     case "sk_send_panel": {
       if (!i.channel) return;
       await i.deferUpdate();
-      await (i.channel as TextChannel).send({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
+      const panelMsg = await (i.channel as TextChannel).send({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
+      storage.setSkellyPanelRef(i.channel.id, panelMsg.id);
       await i.editReply({ embeds: [okEmbed("✅ Skelly ticket panel sent to this channel.")], components: [backRow("panel_skelly")] });
       return;
     }
@@ -3361,21 +3400,23 @@ function ticketPanelComponents() {
 const SKELLY_PRICE_CHANNEL = "https://discord.com/channels/1450662191890956322/1518633695404101773";
 
 const SPAWNER_KEYS = [
-  { key: "skeleton",  label: "Skeleton Spawners",   buyPrice: "3.2m" },
-  { key: "irongolem", label: "Iron Golem Spawners",  buyPrice: "5.5m" },
-  { key: "blaze",     label: "Blaze Spawners",       buyPrice: "2m"   },
-  { key: "pig",       label: "Pig Spawners",         buyPrice: "2m"   },
-  { key: "cow",       label: "Cow Spawners",         buyPrice: "2m"   },
-  { key: "spider",    label: "Spider Spawners",      buyPrice: "4m"   },
-  { key: "piglin",    label: "Piglin Spawners",      buyPrice: "5m"   },
-  { key: "creeper",   label: "Creeper Spawners",     buyPrice: "5m"   },
+  { key: "skeleton",  label: "Skeleton Spawners",   defaultBuyPrice: "3.2m" },
+  { key: "irongolem", label: "Iron Golem Spawners",  defaultBuyPrice: "5.5m" },
+  { key: "blaze",     label: "Blaze Spawners",       defaultBuyPrice: "2m"   },
+  { key: "pig",       label: "Pig Spawners",         defaultBuyPrice: "2m"   },
+  { key: "cow",       label: "Cow Spawners",         defaultBuyPrice: "2m"   },
+  { key: "spider",    label: "Spider Spawners",      defaultBuyPrice: "4m"   },
+  { key: "piglin",    label: "Piglin Spawners",      defaultBuyPrice: "5m"   },
+  { key: "creeper",   label: "Creeper Spawners",     defaultBuyPrice: "5m"   },
 ] as const;
 
 function skellyPriceText(): string {
-  const stock = storage.getAllSpawnerStock();
-  const buyLines = SPAWNER_KEYS.map(({ key, label, buyPrice }) => {
-    const amt = stock[key] ?? 0;
-    return `• ${label} — ${buyPrice} each | Amount: ${amt}`;
+  const stock  = storage.getAllSpawnerStock();
+  const prices = storage.getAllSpawnerBuyPrices();
+  const buyLines = SPAWNER_KEYS.map(({ key, label, defaultBuyPrice }) => {
+    const price = prices[key] ?? defaultBuyPrice;
+    const amt   = stock[key] ?? 0;
+    return `• ${label} — ${price} each | Amount: ${amt}`;
   });
   return [
     "**Buying:**",
@@ -3391,6 +3432,19 @@ function skellyPriceText(): string {
     "5x5 minimum",
     "16 spawner minimum",
   ].join("\n");
+}
+
+async function updateSkellyPanel(client: Client): Promise<void> {
+  const ref = storage.getSkellyPanelRef();
+  if (!ref) return;
+  try {
+    const ch = await client.channels.fetch(ref.channelId);
+    if (!ch || ch.type !== ChannelType.GuildText) return;
+    const msg = await (ch as TextChannel).messages.fetch(ref.messageId);
+    await msg.edit({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
+  } catch {
+    // Message may have been deleted — silently ignore
+  }
 }
 
 function skellyTicketPanelEmbed() {

@@ -63,6 +63,8 @@ interface BotData {
   warns: Record<string, WarnEntry[]>;
   welcomeChannelId: string;
   spawnerStock: Record<string, number>;
+  spawnerBuyPrices: Record<string, string>;
+  skellyPanelRef: { channelId: string; messageId: string } | null;
 }
 
 const DATA_FILE = path.resolve(process.cwd(), "bot-data.json");
@@ -87,6 +89,8 @@ function defaultData(): BotData {
     warns: {},
     welcomeChannelId: "",
     spawnerStock: {},
+    spawnerBuyPrices: {},
+    skellyPanelRef: null,
   };
 }
 
@@ -382,5 +386,28 @@ export const storage = {
 
   getAllSpawnerStock(): Record<string, number> {
     return _data.spawnerStock ?? {};
+  },
+
+  setSpawnerBuyPrice(spawner: string, price: string): void {
+    if (!_data.spawnerBuyPrices) _data.spawnerBuyPrices = {};
+    _data.spawnerBuyPrices[spawner] = price;
+    saveData(_data);
+  },
+
+  getSpawnerBuyPrice(spawner: string): string | undefined {
+    return _data.spawnerBuyPrices?.[spawner];
+  },
+
+  getAllSpawnerBuyPrices(): Record<string, string> {
+    return _data.spawnerBuyPrices ?? {};
+  },
+
+  setSkellyPanelRef(channelId: string, messageId: string): void {
+    _data.skellyPanelRef = { channelId, messageId };
+    saveData(_data);
+  },
+
+  getSkellyPanelRef(): { channelId: string; messageId: string } | null {
+    return _data.skellyPanelRef ?? null;
   },
 };
