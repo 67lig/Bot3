@@ -298,6 +298,11 @@
   "warns": {},
   "welcomeChannelId": "",
   "spawnerStock": {
-    "skeleton": 300
+    "skeleton": 50
+  },
+  "spawnerBuyPrices": {},
+  "skellyPanelRef": {
+    "channelId": "1518633695404101773",
+    "messageId": "1520922140935983326"
   }
 }

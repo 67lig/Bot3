@@ -777,7 +777,7 @@ async function registerCommands(client: Client) {
       ),
     new SlashCommandBuilder()
       .setName("changeprice")
-      .setDescription("Change the buy price of a spawner type (owner/co-owner only)")
+      .setDescription("Change the buy price of a spawner type (owner/co-owner/manager only)")
       .addStringOption((o) =>
         o
           .setName("spawner")
@@ -796,6 +796,49 @@ async function registerCommands(client: Client) {
       )
       .addStringOption((o) =>
         o.setName("price").setDescription("New buy price, e.g. 3m, 2.5m, 500k").setRequired(true),
+      ),
+    new SlashCommandBuilder()
+      .setName("spawner")
+      .setDescription("Manage spawner stock (owner/co-owner/manager only)")
+      .addSubcommand((sub) =>
+        sub
+          .setName("add")
+          .setDescription("Add to a spawner's in-stock amount")
+          .addStringOption((o) =>
+            o.setName("spawner").setDescription("Spawner type").setRequired(true).addChoices(
+              { name: "Skeleton",   value: "skeleton"  },
+              { name: "Iron Golem", value: "irongolem" },
+              { name: "Blaze",      value: "blaze"     },
+              { name: "Pig",        value: "pig"       },
+              { name: "Cow",        value: "cow"       },
+              { name: "Spider",     value: "spider"    },
+              { name: "Piglin",     value: "piglin"    },
+              { name: "Creeper",    value: "creeper"   },
+            ),
+          )
+          .addIntegerOption((o) =>
+            o.setName("amount").setDescription("Amount to add").setRequired(true).setMinValue(1),
+          ),
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("remove")
+          .setDescription("Remove from a spawner's in-stock amount (e.g. after a sale)")
+          .addStringOption((o) =>
+            o.setName("spawner").setDescription("Spawner type").setRequired(true).addChoices(
+              { name: "Skeleton",   value: "skeleton"  },
+              { name: "Iron Golem", value: "irongolem" },
+              { name: "Blaze",      value: "blaze"     },
+              { name: "Pig",        value: "pig"       },
+              { name: "Cow",        value: "cow"       },
+              { name: "Spider",     value: "spider"    },
+              { name: "Piglin",     value: "piglin"    },
+              { name: "Creeper",    value: "creeper"   },
+            ),
+          )
+          .addIntegerOption((o) =>
+            o.setName("amount").setDescription("Amount to remove").setRequired(true).setMinValue(1),
+          ),
       ),
   ].map((c) => c.toJSON());
 
@@ -862,9 +905,12 @@ async function handleInteraction(i: Interaction) {
   if (i.isModalSubmit()) return handleModal(i);
 }
 
+const SKELLY_MANAGER_ROLE_ID = "1520650191139504235";
+
 function isOwner(id: string) { return id === OWNER_ID; }
 function isCoOwner(m: GuildMember) { return m.roles.cache.has(CO_OWNER_ROLE_ID) && !isOwner(m.id); }
 function isOwnerOrCoOwner(m: GuildMember) { return isOwner(m.id) || isCoOwner(m); }
+function isSpawnerManager(m: GuildMember) { return isOwnerOrCoOwner(m) || m.roles.cache.has(SKELLY_MANAGER_ROLE_ID); }
 function isStaff(m: GuildMember) {
   return isOwnerOrCoOwner(m)
     || m.permissions.has(PermissionFlagsBits.ManageChannels)
@@ -1388,8 +1434,8 @@ async function handleCommand(i: ChatInputCommandInteraction) {
 
   if (commandName === "addspawner") {
     const member = i.member as GuildMember;
-    if (!isOwnerOrCoOwner(member)) {
-      await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can update spawner stock.")], flags: 64 });
+    if (!isSpawnerManager(member)) {
+      await i.reply({ embeds: [errEmbed("You don't have permission to update spawner stock.")], flags: 64 });
       return;
     }
     const spawnerKey = i.options.getString("spawner", true);
@@ -1401,14 +1447,46 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** — Amount in stock: **${amount}**`)],
       flags: 64,
     });
-    await updateSkellyPanel(client);
+    await updateSkellyPanel(client, guild ?? undefined);
+    return;
+  }
+
+  if (commandName === "spawner") {
+    const member = i.member as GuildMember;
+    if (!isSpawnerManager(member)) {
+      await i.reply({ embeds: [errEmbed("You don't have permission to manage spawner stock.")], flags: 64 });
+      return;
+    }
+    const sub        = i.options.getSubcommand();
+    const spawnerKey = i.options.getString("spawner", true);
+    const amount     = i.options.getInteger("amount", true);
+    const entry      = SPAWNER_KEYS.find((s) => s.key === spawnerKey);
+    const label      = entry ? entry.label : spawnerKey;
+    const current    = storage.getSpawnerStock(spawnerKey);
+
+    if (sub === "add") {
+      const newTotal = current + amount;
+      storage.setSpawnerStock(spawnerKey, newTotal);
+      await i.reply({
+        embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** — Added **${amount}**. Amount in stock: **${newTotal}**`)],
+        flags: 64,
+      });
+    } else if (sub === "remove") {
+      const newTotal = Math.max(0, current - amount);
+      storage.setSpawnerStock(spawnerKey, newTotal);
+      await i.reply({
+        embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** — Removed **${amount}**. Amount in stock: **${newTotal}**`)],
+        flags: 64,
+      });
+    }
+    await updateSkellyPanel(client, guild ?? undefined);
     return;
   }
 
   if (commandName === "changeprice") {
     const member = i.member as GuildMember;
-    if (!isOwnerOrCoOwner(member)) {
-      await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can change spawner prices.")], flags: 64 });
+    if (!isSpawnerManager(member)) {
+      await i.reply({ embeds: [errEmbed("You don't have permission to change spawner prices.")], flags: 64 });
       return;
     }
     const spawnerKey = i.options.getString("spawner", true);
@@ -1420,7 +1498,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** buy price updated to **${newPrice}**`)],
       flags: 64,
     });
-    await updateSkellyPanel(client);
+    await updateSkellyPanel(client, guild ?? undefined);
     return;
   }
 
@@ -3434,16 +3512,40 @@ function skellyPriceText(): string {
   ].join("\n");
 }
 
-async function updateSkellyPanel(client: Client): Promise<void> {
+async function updateSkellyPanel(client: Client, guild?: Guild): Promise<void> {
+  // 1. Try stored ref first (fast path)
   const ref = storage.getSkellyPanelRef();
-  if (!ref) return;
-  try {
-    const ch = await client.channels.fetch(ref.channelId);
-    if (!ch || ch.type !== ChannelType.GuildText) return;
-    const msg = await (ch as TextChannel).messages.fetch(ref.messageId);
-    await msg.edit({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
-  } catch {
-    // Message may have been deleted — silently ignore
+  if (ref) {
+    try {
+      const ch = await client.channels.fetch(ref.channelId);
+      if (ch && ch.type === ChannelType.GuildText) {
+        const msg = await (ch as TextChannel).messages.fetch(ref.messageId);
+        await msg.edit({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
+        return;
+      }
+    } catch {
+      // Ref is stale — fall through to scan
+    }
+  }
+
+  // 2. Scan all guild text channels for the bot's "Spawner Prices" panel message
+  const g = guild ?? (client.guilds.cache.first());
+  if (!g) return;
+  for (const ch of g.channels.cache.values()) {
+    if (ch.type !== ChannelType.GuildText) continue;
+    try {
+      const msgs = await (ch as TextChannel).messages.fetch({ limit: 50 });
+      for (const msg of msgs.values()) {
+        if (msg.author.id !== client.user!.id) continue;
+        if (msg.embeds[0]?.title === "Spawner Prices") {
+          await msg.edit({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
+          storage.setSkellyPanelRef(ch.id, msg.id);
+          return;
+        }
+      }
+    } catch {
+      continue;
+    }
   }
 }
 
