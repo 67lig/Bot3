@@ -2864,10 +2864,10 @@ async function handleModal(i: ModalSubmitInteraction) {
     }
     if (existingId) storage.removeTicket(existingId);
     await i.deferReply({ flags: 64 });
-    let discordCat = guild.channels.cache.find((c) => c.type === ChannelType.GuildCategory && c.name === "Digging Tickets") as CategoryChannel | undefined;
+    let discordCat = guild.channels.cache.find((c) => c.type === ChannelType.GuildCategory && c.name === FARM_CATEGORY.discordCategoryName) as CategoryChannel | undefined;
     if (!discordCat) {
       discordCat = await guild.channels.create({
-        name: "Digging Tickets",
+        name: FARM_CATEGORY.discordCategoryName,
         type: ChannelType.GuildCategory,
         permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }],
       });
