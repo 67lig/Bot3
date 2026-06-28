@@ -1,42 +1,5 @@
 {
-  "tickets": {
-    "1520925287536394341": {
-      "userId": "1491457883219693720",
-      "username": "v3lgh",
-      "categoryId": "giveaway",
-      "guildId": "1450662191890956322",
-      "channelId": "1520925287536394341",
-      "createdAt": "2026-06-28T22:54:06.318Z",
-      "ticketNumber": 18
-    },
-    "1520925297741140060": {
-      "userId": "1491457883219693720",
-      "username": "v3lgh",
-      "categoryId": "support",
-      "guildId": "1450662191890956322",
-      "channelId": "1520925297741140060",
-      "createdAt": "2026-06-28T22:54:08.810Z",
-      "ticketNumber": 19
-    },
-    "1520925319001931920": {
-      "userId": "1491457883219693720",
-      "username": "v3lgh",
-      "categoryId": "builder-application",
-      "guildId": "1450662191890956322",
-      "channelId": "1520925319001931920",
-      "createdAt": "2026-06-28T22:54:14.018Z",
-      "ticketNumber": 20
-    },
-    "1520925329240363018": {
-      "userId": "1491457883219693720",
-      "username": "v3lgh",
-      "categoryId": "partnership",
-      "guildId": "1450662191890956322",
-      "channelId": "1520925329240363018",
-      "createdAt": "2026-06-28T22:54:16.262Z",
-      "ticketNumber": 21
-    }
-  },
+  "tickets": {},
   "ticketCounter": 21,
   "farmDescription": "Buy Farms – For users interested in purchasing a farm. Use this ticket for farm availability, pricing, purchase inquiries, or any questions related to buying a farm.",
   "farmList": "Available farms:\nNone\n\n** CURRENTLY LOOKING FOR BUILDERS, MAKE A SUPPORT TICKET TO APPLY **\n\n\n\nMining Services: 1k Per Block",
