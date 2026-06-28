@@ -300,9 +300,11 @@
   "spawnerStock": {
     "skeleton": 50
   },
-  "spawnerBuyPrices": {},
+  "spawnerBuyPrices": {
+    "skeleton": "3.3m"
+  },
   "skellyPanelRef": {
     "channelId": "1518633695404101773",
-    "messageId": "1520922140935983326"
+    "messageId": "1520923305086030027"
   }
 }

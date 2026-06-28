@@ -1447,7 +1447,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** — Amount in stock: **${amount}**`)],
       flags: 64,
     });
-    await updateSkellyPanel(client, guild ?? undefined);
+    await updateSkellyPanel(_client!, guild ?? undefined);
     return;
   }
 
@@ -1479,7 +1479,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
         flags: 64,
       });
     }
-    await updateSkellyPanel(client, guild ?? undefined);
+    await updateSkellyPanel(_client!, guild ?? undefined);
     return;
   }
 
@@ -1498,7 +1498,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** buy price updated to **${newPrice}**`)],
       flags: 64,
     });
-    await updateSkellyPanel(client, guild ?? undefined);
+    await updateSkellyPanel(_client!, guild ?? undefined);
     return;
   }
 
