@@ -98,6 +98,29 @@ function computeLevel(totalXp: number): { level: number; currentXp: number; need
   return { level, currentXp: remaining, neededXp: xpForNextLevel(level) };
 }
 
+function muteDmEmbed(reason: string, duration: string, moderatorTag: string, guildName: string): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(0xed4245)
+    .setTitle("You got muted")
+    .addFields(
+      { name: "Reason", value: reason },
+      { name: "Duration", value: duration },
+      { name: "Responsible", value: moderatorTag },
+    )
+    .setFooter({ text: `Sent from ${guildName}` });
+}
+
+function unmuteDmEmbed(reason: string, moderatorTag: string, guildName: string): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(0x57f287)
+    .setTitle("You got unmuted")
+    .addFields(
+      { name: "Reason", value: reason },
+      { name: "Responsible", value: moderatorTag },
+    )
+    .setFooter({ text: `Sent from ${guildName}` });
+}
+
 // ─── Spam detection ───────────────────────────────────────────────────────────
 const spamTracker    = new Map<string, number[]>();          // userId → timestamps
 const spamCooldown   = new Map<string, number>();            // userId → last alert time
@@ -176,23 +199,13 @@ async function applyProgressivePunishment(
     if (member.moderatable) {
       await member.timeout(60_000, `Auto-punishment (offense #2): ${reason}`).catch(() => {});
     }
-    user?.send({
-      embeds: [new EmbedBuilder()
-        .setColor(WARNING_COLOR)
-        .setTitle("⏱️ 1-Minute Mute")
-        .setDescription(`You have been muted for **1 minute** in **${guild.name}** for: ${reason}.`)],
-    }).catch(() => {});
+    user?.send({ embeds: [muteDmEmbed(reason, "1 minute", "V3 BOT (AutoMod)", guild.name)] }).catch(() => {});
   } else if (newCount === 3) {
     // 3rd: 5 minute timeout
     if (member.moderatable) {
       await member.timeout(5 * 60_000, `Auto-punishment (offense #3): ${reason}`).catch(() => {});
     }
-    user?.send({
-      embeds: [new EmbedBuilder()
-        .setColor(WARNING_COLOR)
-        .setTitle("⏱️ 5-Minute Mute")
-        .setDescription(`You have been muted for **5 minutes** in **${guild.name}** for: ${reason}.`)],
-    }).catch(() => {});
+    user?.send({ embeds: [muteDmEmbed(reason, "5 minutes", "V3 BOT (AutoMod)", guild.name)] }).catch(() => {});
   } else if (newCount === 4) {
     // 4th: 30 minute timeout + warn
     if (member.moderatable) {
@@ -200,12 +213,7 @@ async function applyProgressivePunishment(
     }
     const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #4): ${reason}`, moderatorId: "BOT", moderatorTag: "V3 BOT", timestamp: new Date().toISOString() };
     const warnCount = storage.addWarn(userId, warnEntry);
-    user?.send({
-      embeds: [new EmbedBuilder()
-        .setColor(ERROR_COLOR)
-        .setTitle("⏱️ 30-Minute Mute + Warn")
-        .setDescription(`You have been muted for **30 minutes** and warned (**${warnCount}/5**) in **${guild.name}** for: ${reason}.`)],
-    }).catch(() => {});
+    user?.send({ embeds: [muteDmEmbed(`${reason} (Warning ${warnCount}/5)`, "30 minutes", "V3 BOT (AutoMod)", guild.name)] }).catch(() => {});
     if (warnCount >= 5 && member.bannable) {
       await member.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
     }
@@ -676,6 +684,15 @@ export function createBotClient(): Client | null {
     const isBoosting = !!newMember.premiumSince;
     if (!wasBoosting && isBoosting) {
       await newMember.roles.add(BOOST_ROLE_ID).catch(() => {});
+    }
+
+    // Detect timeout expiry / removal → send unmute DM
+    const wasTimedOut = !!oldMember.communicationDisabledUntil;
+    const isTimedOut  = !!newMember.communicationDisabledUntil;
+    if (wasTimedOut && !isTimedOut) {
+      newMember.send({
+        embeds: [unmuteDmEmbed("Expired", "V3 BOT", newMember.guild.name)],
+      }).catch(() => {});
     }
   });
 
@@ -1187,6 +1204,17 @@ async function registerCommands(client: Client) {
       .addUserOption((opt) => opt.setName("user").setDescription("Member to kick").setRequired(true))
       .addStringOption((opt) => opt.setName("reason").setDescription("Reason for kick").setRequired(false)),
     new SlashCommandBuilder()
+      .setName("mute")
+      .setDescription("Mute (timeout) a member and log a warning")
+      .addUserOption((opt) => opt.setName("user").setDescription("Member to mute").setRequired(true))
+      .addStringOption((opt) => opt.setName("duration").setDescription("Duration e.g. 10m, 1h, 2d").setRequired(true))
+      .addStringOption((opt) => opt.setName("reason").setDescription("Reason for mute").setRequired(false)),
+    new SlashCommandBuilder()
+      .setName("unmute")
+      .setDescription("Remove a member's timeout")
+      .addUserOption((opt) => opt.setName("user").setDescription("Member to unmute").setRequired(true))
+      .addStringOption((opt) => opt.setName("reason").setDescription("Reason for unmute").setRequired(false)),
+    new SlashCommandBuilder()
       .setName("ban")
       .setDescription("Ban a member from the server (staff only)")
       .addUserOption((opt) => opt.setName("user").setDescription("Member to ban").setRequired(true))
@@ -1555,6 +1583,77 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     await i.deferReply();
     await guild.members.ban(target.id, { reason });
     await i.editReply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("🔨 Member Banned").addFields({ name: "User", value: `<@${target.id}>`, inline: true }, { name: "Moderator", value: `<@${user.id}>`, inline: true }, { name: "Reason", value: reason }).setTimestamp()] });
+    return;
+  }
+
+  if (commandName === "mute") {
+    if (!isStaff(i.member as GuildMember)) {
+      await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return;
+    }
+    if (!guild) return;
+    const target = i.options.getUser("user", true);
+    const durationInput = i.options.getString("duration", true);
+    const reason = i.options.getString("reason") || "No reason provided";
+    const durationMs = parseDuration(durationInput);
+    if (!durationMs) {
+      await i.reply({ embeds: [errEmbed("Invalid duration. Use e.g. `10m`, `1h`, `2d`.")], flags: 64 }); return;
+    }
+    const m = guild.members.cache.get(target.id);
+    if (!m) { await i.reply({ embeds: [errEmbed("Member not found in this server.")], flags: 64 }); return; }
+    if (!m.moderatable) { await i.reply({ embeds: [errEmbed("I cannot mute this member.")], flags: 64 }); return; }
+    await i.deferReply();
+    await m.timeout(durationMs, reason);
+    // Log a warn
+    const warnEntry: WarnEntry = { userId: target.id, reason: `Mute: ${reason}`, moderatorId: user.id, moderatorTag: user.username, timestamp: new Date().toISOString() };
+    const warnCount = storage.addWarn(target.id, warnEntry);
+    // DM the target
+    target.send({ embeds: [muteDmEmbed(reason, durationInput, `@${user.username}`, guild.name)] }).catch(() => {});
+    await i.editReply({
+      embeds: [new EmbedBuilder()
+        .setColor(0xed4245)
+        .setTitle("🔇 Member Muted")
+        .addFields(
+          { name: "User",      value: `<@${target.id}>`,      inline: true },
+          { name: "Moderator", value: `<@${user.id}>`,         inline: true },
+          { name: "Duration",  value: durationInput,            inline: true },
+          { name: "Reason",    value: reason },
+          { name: "Warn",      value: `${warnCount} / 5` },
+        )
+        .setTimestamp()],
+    });
+    if (warnCount >= 5 && m.bannable) {
+      await m.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
+    }
+    return;
+  }
+
+  if (commandName === "unmute") {
+    if (!isStaff(i.member as GuildMember)) {
+      await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return;
+    }
+    if (!guild) return;
+    const target = i.options.getUser("user", true);
+    const reason = i.options.getString("reason") || "Manually removed";
+    const m = guild.members.cache.get(target.id);
+    if (!m) { await i.reply({ embeds: [errEmbed("Member not found in this server.")], flags: 64 }); return; }
+    if (!m.communicationDisabledUntil) {
+      await i.reply({ embeds: [errEmbed("This member is not currently muted.")], flags: 64 }); return;
+    }
+    await i.deferReply();
+    await m.timeout(null, reason);
+    // DM the target
+    target.send({ embeds: [unmuteDmEmbed(reason, `@${user.username}`, guild.name)] }).catch(() => {});
+    await i.editReply({
+      embeds: [new EmbedBuilder()
+        .setColor(0x57f287)
+        .setTitle("🔊 Member Unmuted")
+        .addFields(
+          { name: "User",      value: `<@${target.id}>`, inline: true },
+          { name: "Moderator", value: `<@${user.id}>`,   inline: true },
+          { name: "Reason",    value: reason },
+        )
+        .setTimestamp()],
+    });
     return;
   }
 
