@@ -711,6 +711,9 @@ export function createBotClient(): Client | null {
           }
         }
 
+        // Owner bypasses all automod
+        if (isOwner(msg.author.id)) return;
+
         // ── Cross-channel duplicate detection ──
         if (!isStaff(msg.guild.members.cache.get(msg.author.id) as GuildMember)) {
           const crossKey = getCrossKey(msg);
