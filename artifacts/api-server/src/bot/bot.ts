@@ -2237,6 +2237,10 @@ async function routeMessageCommand(msg: Message, cmd: string, args: string[]): P
       break;
     }
     case "purge": {
+      if (!isStaff(msg.guild!.members.cache.get(msg.author.id) as GuildMember)) {
+        await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {});
+        return true;
+      }
       const isAll = args[0]?.toLowerCase() === "all";
       const n = isAll ? null : parseInt(args[0] ?? "", 10);
       if (!isAll && (isNaN(n!) || n! < 1 || n! > 100)) {
