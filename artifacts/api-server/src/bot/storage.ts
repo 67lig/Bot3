@@ -54,6 +54,11 @@ export interface XpEntry {
   lastMessage: number;
 }
 
+export interface ViolationEntry {
+  count: number;
+  expiresAt: string; // ISO timestamp — when this counter resets
+}
+
 interface BotData {
   tickets: Record<string, TicketEntry>;
   ticketCounter: number;
@@ -68,6 +73,7 @@ interface BotData {
   warns: Record<string, WarnEntry[]>;
   welcomeChannelId: string;
   xp: Record<string, XpEntry>;
+  violations: Record<string, ViolationEntry>;
 }
 
 const DATA_FILE = path.resolve(process.cwd(), "bot-data.json");
@@ -79,6 +85,7 @@ function defaultData(): BotData {
     tickets: {},
     ticketCounter: 0,
     xp: {},
+    violations: {},
     farmDescription:
       "Buy Farms – For users interested in purchasing a farm. Use this ticket for farm availability, pricing, purchase inquiries, or any questions related to buying a farm.",
     farmList: "available farms:\n\n(No farms currently listed. Check back soon!)",
@@ -399,5 +406,41 @@ export const storage = {
 
   getAllXP(): Record<string, XpEntry> {
     return _data.xp ?? {};
+  },
+
+  // ── Violations (progressive punishment, 7-day window, persisted) ──────────
+  getViolationCount(userId: string): number {
+    if (!_data.violations) _data.violations = {};
+    const v = _data.violations[userId];
+    if (!v) return 0;
+    if (new Date() >= new Date(v.expiresAt)) {
+      delete _data.violations[userId];
+      saveData(_data);
+      return 0;
+    }
+    return v.count;
+  },
+
+  incrementViolation(userId: string, windowMs: number): number {
+    if (!_data.violations) _data.violations = {};
+    const v = _data.violations[userId];
+    const now = new Date();
+    if (!v || now >= new Date(v.expiresAt)) {
+      // Start fresh window
+      _data.violations[userId] = {
+        count: 1,
+        expiresAt: new Date(now.getTime() + windowMs).toISOString(),
+      };
+    } else {
+      v.count += 1;
+    }
+    saveData(_data);
+    return _data.violations[userId]!.count;
+  },
+
+  clearViolation(userId: string): void {
+    if (!_data.violations) return;
+    delete _data.violations[userId];
+    saveData(_data);
   },
 };

@@ -125,10 +125,8 @@ function getCrossKey(msg: import("discord.js").Message): string | null {
 }
 
 // ─── Progressive punishment tracker ──────────────────────────────────────────
-// Tracks per-user violation count (across spam, bad words, links)
-const violationCount  = new Map<string, number>();           // userId → total offenses
-const violationExpiry = new Map<string, ReturnType<typeof setTimeout>>(); // auto-reset after 24h
-const VIOLATION_RESET_MS = 24 * 60 * 60 * 1000;
+// Violation counts are persisted to storage (7-day window, survives restarts)
+const VIOLATION_RESET_MS = 7 * 24 * 60 * 60 * 1000;
 const LINK_REGEX = /https?:\/\/\S+|discord\.gg\/\S+/i;
 
 async function applyProgressivePunishment(
@@ -139,19 +137,7 @@ async function applyProgressivePunishment(
   violationType: string,
   snippet: string,
 ) {
-  const prevCount = violationCount.get(userId) ?? 0;
-  const newCount = prevCount + 1;
-  violationCount.set(userId, newCount);
-
-  const existingTimer = violationExpiry.get(userId);
-  if (existingTimer) clearTimeout(existingTimer);
-  violationExpiry.set(
-    userId,
-    setTimeout(() => {
-      violationCount.delete(userId);
-      violationExpiry.delete(userId);
-    }, VIOLATION_RESET_MS),
-  );
+  const newCount = storage.incrementViolation(userId, VIOLATION_RESET_MS);
 
   const member = await guild.members.fetch(userId).catch(() => null);
   const user   = member?.user ?? null;
