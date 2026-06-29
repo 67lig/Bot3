@@ -98,26 +98,26 @@ function computeLevel(totalXp: number): { level: number; currentXp: number; need
   return { level, currentXp: remaining, neededXp: xpForNextLevel(level) };
 }
 
-function muteDmEmbed(reason: string, duration: string, moderatorTag: string, guildName: string): EmbedBuilder {
+function muteDmEmbed(reason: string, duration: string, moderatorTag: string, guildName: string, warnCount?: number): EmbedBuilder {
+  let desc = `**You got muted**\n\n**Reason:** ${reason}\n**Duration:** ${duration}\n**Responsible:** ${moderatorTag}`;
+  if (warnCount !== undefined) desc += `\n**Warnings:** ${warnCount} / 5 — Reaching 5 results in an automatic ban.`;
   return new EmbedBuilder()
     .setColor(0xed4245)
-    .setTitle("You got muted")
-    .addFields(
-      { name: "Reason", value: reason },
-      { name: "Duration", value: duration },
-      { name: "Responsible", value: moderatorTag },
-    )
+    .setDescription(desc)
     .setFooter({ text: `Sent from ${guildName}` });
 }
 
 function unmuteDmEmbed(reason: string, moderatorTag: string, guildName: string): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(0x57f287)
-    .setTitle("You got unmuted")
-    .addFields(
-      { name: "Reason", value: reason },
-      { name: "Responsible", value: moderatorTag },
-    )
+    .setDescription(`**You got unmuted**\n\n**Reason:** ${reason}\n**Responsible:** ${moderatorTag}`)
+    .setFooter({ text: `Sent from ${guildName}` });
+}
+
+function warnDmEmbed(reason: string, warnCount: number, guildName: string): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(0xed4245)
+    .setDescription(`**You have been warned**\n\n**Reason:** ${reason}\n**Warnings:** ${warnCount} / 5 — Reaching 5 results in an automatic ban.`)
     .setFooter({ text: `Sent from ${guildName}` });
 }
 
@@ -188,12 +188,7 @@ async function applyProgressivePunishment(
   // --- Progressive actions ---
   if (newCount === 1) {
     // 1st: DM warning only
-    user?.send({
-      embeds: [new EmbedBuilder()
-        .setColor(WARNING_COLOR)
-        .setTitle("⚠️ Warning")
-        .setDescription(`Hey <@${userId}>, please stop **${reason.toLowerCase()}** in **${guild.name}**.\nContinuing will result in a mute.`)],
-    }).catch(() => {});
+    user?.send({ embeds: [warnDmEmbed(`${reason} — Continuing will result in a mute.`, newCount, guild.name)] }).catch(() => {});
   } else if (newCount === 2) {
     // 2nd: 1 minute timeout
     if (member.moderatable) {
@@ -221,12 +216,7 @@ async function applyProgressivePunishment(
     // 5th+: warn (auto-ban at 5)
     const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #${newCount}): ${reason}`, moderatorId: "BOT", moderatorTag: "V3 BOT", timestamp: new Date().toISOString() };
     const warnCount = storage.addWarn(userId, warnEntry);
-    user?.send({
-      embeds: [new EmbedBuilder()
-        .setColor(ERROR_COLOR)
-        .setTitle("⚠️ Formal Warning")
-        .setDescription(`You have received a formal warning (**${warnCount}/5**) in **${guild.name}** for: ${reason}.`)],
-    }).catch(() => {});
+    user?.send({ embeds: [warnDmEmbed(reason, warnCount, guild.name)] }).catch(() => {});
     if (warnCount >= 5 && member.bannable) {
       await member.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
     }
@@ -923,7 +913,7 @@ export function createBotClient(): Client | null {
             .addFields({ name: "User", value: `<@${targetId}>`, inline: true }, { name: "Moderator", value: `<@${msg.author.id}>`, inline: true }, { name: "Total", value: `**${count} / 5**`, inline: true }, { name: "Reason", value: reason })
             .setTimestamp()] }).catch(() => {});
           const target = await msg.client.users.fetch(targetId).catch(() => null);
-          if (target) target.send({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("⚠️ You have been warned").setDescription(`**Reason:** ${reason}\n**Warnings:** ${count} / 5`).setTimestamp()] }).catch(() => {});
+          if (target) target.send({ embeds: [warnDmEmbed(reason, count, guild?.name ?? "V3 Sanctuary")] }).catch(() => {});
           if (count >= 5) {
             const m = guild?.members.cache.get(targetId);
             if (m?.bannable) await m.ban({ reason: "Auto-ban: 5 warnings reached" }).catch(() => {});
@@ -1525,7 +1515,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       )
       .setTimestamp();
     await i.reply({ embeds: [warnEmbed] });
-    target.send({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("⚠️ You have been warned").setDescription(`**Reason:** ${reason}\n**Warnings:** ${count} / 5 — Reaching 5 results in an automatic ban.`).setTimestamp()] }).catch(() => {});
+    target.send({ embeds: [warnDmEmbed(reason, count, guild?.name ?? "V3 Sanctuary")] }).catch(() => {});
     if (count >= 5) {
       const m = guild.members.cache.get(target.id);
       if (m?.bannable) await m.ban({ reason: `Auto-ban: 5 warnings reached` }).catch(() => {});
@@ -1607,12 +1597,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     const warnEntry: WarnEntry = { userId: target.id, reason: `Mute: ${reason}`, moderatorId: user.id, moderatorTag: user.username, timestamp: new Date().toISOString() };
     const warnCount = storage.addWarn(target.id, warnEntry);
     // DM the target — include warn count so they know they've been warned
-    target.send({
-      embeds: [
-        muteDmEmbed(reason, durationInput, `@${user.username}`, guild.name)
-          .addFields({ name: "Warnings", value: `${warnCount} / 5 — 5 warnings results in a ban.` }),
-      ],
-    }).catch(() => {});
+    target.send({ embeds: [muteDmEmbed(reason, durationInput, `@${user.username}`, guild.name, warnCount)] }).catch(() => {});
     await i.editReply({
       embeds: [new EmbedBuilder()
         .setColor(0xed4245)

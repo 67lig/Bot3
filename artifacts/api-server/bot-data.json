@@ -7,8 +7,14 @@
       "lastMessage": 1782698206268
     },
     "1384009855043633237": {
-      "xp": 35,
-      "lastMessage": 1782699749780
+      "xp": 48,
+      "lastMessage": 1782701918551
+    }
+  },
+  "violations": {
+    "1384009855043633237": {
+      "count": 1,
+      "expiresAt": "2026-07-06T02:58:20.472Z"
     }
   },
   "farmDescription": "Buy Farms – For users interested in purchasing a farm. Use this ticket for farm availability, pricing, purchase inquiries, or any questions related to buying a farm.",
@@ -312,6 +318,16 @@
       "createdAt": "2026-06-29T01:57:33.671Z"
     }
   },
-  "warns": {},
+  "warns": {
+    "1384009855043633237": [
+      {
+        "userId": "1384009855043633237",
+        "reason": "test",
+        "moderatorId": "1491457883219693720",
+        "moderatorTag": "v3lgh",
+        "timestamp": "2026-06-29T02:57:11.091Z"
+      }
+    ]
+  },
   "welcomeChannelId": ""
 }
