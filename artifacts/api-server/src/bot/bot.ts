@@ -4207,13 +4207,13 @@ function ticketPanelEmbed() {
     
     .setTimestamp();
 
+  const TICKET_PANEL_CATEGORY_IDS = ["support", "giveaway", "skellys"];
   let desc = data.ticketPanelDesc ? data.ticketPanelDesc + "\n\n" : "";
-  for (const cat of REGULAR_CATEGORIES) {
+  for (const cat of REGULAR_CATEGORIES.filter((c) => TICKET_PANEL_CATEGORY_IDS.includes(c.id))) {
     const msg = storage.getCategoryMessage(cat.id) ?? cat.description;
     desc += `**${cat.label}** – ${msg}\n\n`;
   }
-  desc += `**Partnership** – For server partnership inquiries. Please provide details about your server, player count, and what kind of partnership you are looking for.\n\n`;
-  desc += `**Staff Application** – Interested in joining the staff team? Open a ticket here to begin your application process and answer a short set of questions.`;
+  desc += `**Partnership** – For server partnership inquiries. Please provide details about your server, player count, and what kind of partnership you are looking for.`;
   embed.setDescription(desc.trim());
   return embed;
 }
@@ -4224,11 +4224,7 @@ function ticketPanelComponents() {
       new ButtonBuilder().setCustomId("ticket_btn_support").setLabel("🛡️ Reports & Support").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("ticket_btn_giveaway").setLabel("🎁 Giveaway").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("ticket_btn_skellys").setLabel("💀 Buy/Sell Skellys").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("ticket_btn_builder-application").setLabel("🏗️ Builder Application").setStyle(ButtonStyle.Secondary),
-    ),
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("partnership_ticket").setLabel("🤝 Partnership").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("staff_apply").setLabel("📋 Staff Application").setStyle(ButtonStyle.Secondary),
     ),
   ];
 }
