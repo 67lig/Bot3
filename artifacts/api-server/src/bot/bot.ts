@@ -1606,8 +1606,13 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     // Log a warn
     const warnEntry: WarnEntry = { userId: target.id, reason: `Mute: ${reason}`, moderatorId: user.id, moderatorTag: user.username, timestamp: new Date().toISOString() };
     const warnCount = storage.addWarn(target.id, warnEntry);
-    // DM the target
-    target.send({ embeds: [muteDmEmbed(reason, durationInput, `@${user.username}`, guild.name)] }).catch(() => {});
+    // DM the target — include warn count so they know they've been warned
+    target.send({
+      embeds: [
+        muteDmEmbed(reason, durationInput, `@${user.username}`, guild.name)
+          .addFields({ name: "Warnings", value: `${warnCount} / 5 — 5 warnings results in a ban.` }),
+      ],
+    }).catch(() => {});
     await i.editReply({
       embeds: [new EmbedBuilder()
         .setColor(0xed4245)
