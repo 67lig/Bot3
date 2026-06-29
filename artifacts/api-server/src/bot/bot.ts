@@ -877,7 +877,7 @@ export function createBotClient(): Client | null {
         }
 
         if (cmd === "warns") {
-          if (!member || !isStaff(member)) return;
+          if (!member || !isStaff(member)) { await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {}); return; }
           const targetId = msg.mentions.users.first()?.id ?? args[1];
           if (!targetId) { await msg.reply({ embeds: [errEmbed("Usage: `!warns @user`")] }).catch(() => {}); return; }
           const target = await msg.client.users.fetch(targetId).catch(() => null);
@@ -895,7 +895,7 @@ export function createBotClient(): Client | null {
         // Route ! commands that mirror slash commands (stats, close, rename, etc.)
         if (await routeMessageCommand(msg, cmd, args.slice(1))) return;
 
-        if (!member || !isStaff(member)) return;
+        if (!member || !isStaff(member)) { await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {}); return; }
 
         if (cmd === "warn") {
           const targetId = msg.mentions.users.first()?.id;
@@ -940,7 +940,7 @@ export function createBotClient(): Client | null {
         }
 
         if (cmd === "rules") {
-          if (!isOwnerOrCoOwner(member)) return;
+          if (!isOwnerOrCoOwner(member)) { await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {}); return; }
           const WHITE = 0xffffff;
           const ch = msg.channel as TextChannel;
 
@@ -1029,7 +1029,7 @@ export function createBotClient(): Client | null {
         }
 
         if (cmd === "setwelcome") {
-          if (!isOwnerOrCoOwner(member)) return;
+          if (!isOwnerOrCoOwner(member)) { await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {}); return; }
           const chId = msg.mentions.channels.first()?.id;
           if (!chId) { await msg.reply({ embeds: [errEmbed("Usage: `!setwelcome #channel`")] }).catch(() => {}); return; }
           storage.setWelcomeChannelId(chId);
