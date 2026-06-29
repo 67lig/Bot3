@@ -497,8 +497,32 @@ export function createBotClient(): Client | null {
     await ch.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {});
   });
 
+  const BOOST_ROLE_ID = "1520970038369194077";
+
+  client.on("guildMemberUpdate", async (oldMember, newMember) => {
+    const wasBoosting = !!oldMember.premiumSince;
+    const isBoosting = !!newMember.premiumSince;
+    if (!wasBoosting && isBoosting) {
+      await newMember.roles.add(BOOST_ROLE_ID).catch(() => {});
+    }
+  });
+
+  const XP_COOLDOWN_MS = 60_000;
+  const XP_MIN = 15;
+  const XP_MAX = 25;
+
   client.on("messageCreate", (msg) => {
     if (msg.author.bot) return;
+
+    // ── XP tracking ──
+    if (msg.guild && !msg.author.bot) {
+      const now = Date.now();
+      const entry = storage.getXP(msg.author.id);
+      if (now - entry.lastMessage >= XP_COOLDOWN_MS) {
+        const gained = Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
+        storage.addXP(msg.author.id, gained);
+      }
+    }
 
     // ── !-prefix message commands ──
     if (msg.content.startsWith("!")) {
@@ -857,6 +881,10 @@ async function registerCommands(client: Client) {
       .addIntegerOption((o) =>
         o.setName("amount").setDescription("Number of messages to delete (1–100)").setRequired(true).setMinValue(1).setMaxValue(100),
       ),
+    new SlashCommandBuilder()
+      .setName("level")
+      .setDescription("View your rank card and XP progress")
+      .addUserOption((o) => o.setName("user").setDescription("User to check (defaults to you)").setRequired(false)),
   ].map((c) => c.toJSON());
 
   try {
@@ -1434,6 +1462,64 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     return;
   }
 
+  if (commandName === "level") {
+    const target = i.options.getUser("user", false) ?? user;
+    const member = guild?.members.cache.get(target.id) ?? await guild?.members.fetch(target.id).catch(() => null);
+
+    // XP level formula (MEE6-style): XP needed for level N → level N+1 = 5N² + 50N + 100
+    function xpForNextLevel(level: number): number {
+      return 5 * level * level + 50 * level + 100;
+    }
+    function computeLevel(totalXp: number): { level: number; currentXp: number; neededXp: number } {
+      let level = 0;
+      let remaining = totalXp;
+      while (remaining >= xpForNextLevel(level)) {
+        remaining -= xpForNextLevel(level);
+        level++;
+      }
+      return { level, currentXp: remaining, neededXp: xpForNextLevel(level) };
+    }
+
+    const entry = storage.getXP(target.id);
+    const totalXp = entry.xp;
+    const { level, currentXp, neededXp } = computeLevel(totalXp);
+
+    // Compute rank among all tracked users in this guild
+    const allXp = Object.entries(storage.getAllXP());
+    const sorted = allXp.sort((a, b) => b[1].xp - a[1].xp);
+    const rankPos = sorted.findIndex(([id]) => id === target.id) + 1;
+    const rank = rankPos > 0 ? rankPos : allXp.length + 1;
+
+    // Build XP progress bar (20 segments)
+    const BAR_LENGTH = 20;
+    const filled = Math.round((currentXp / neededXp) * BAR_LENGTH);
+    const bar = "█".repeat(filled) + "░".repeat(BAR_LENGTH - filled);
+
+    const pct = Math.round((currentXp / neededXp) * 100);
+    const displayName = member?.displayName ?? target.username;
+    const avatarUrl = target.displayAvatarURL({ size: 256 });
+
+    const embed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setAuthor({ name: displayName, iconURL: avatarUrl })
+      .setThumbnail(avatarUrl)
+      .addFields(
+        { name: "RANK", value: `**#${rank}**`, inline: true },
+        { name: "LEVEL", value: `**${level}**`, inline: true },
+        { name: "TOTAL XP", value: `**${totalXp.toLocaleString()} XP**`, inline: true },
+        {
+          name: `XP Progress — ${pct}%`,
+          value: `\`${bar}\`\n**${currentXp.toLocaleString()}** / **${neededXp.toLocaleString()} XP** to level **${level + 1}**`,
+          inline: false,
+        },
+      )
+      .setFooter({ text: `V3 Sanctuary • Rank Card`, iconURL: guild?.iconURL() ?? undefined })
+      .setTimestamp();
+
+    await i.reply({ embeds: [embed] });
+    return;
+  }
+
   if (commandName === "buildpayment") {
     if (!channel || !guild) return;
     const channelId = channel.id;
@@ -1802,6 +1888,11 @@ async function routeMessageCommand(msg: Message, cmd: string, args: string[]): P
       }
       commandName = "giveaway";
       opts = { subcommand: sub, strings: { id: args[1] ?? null } };
+      break;
+    }
+    case "level": {
+      commandName = "level";
+      opts = { users: { user: mentioned ?? null }, members: { user: mentionedMember ?? null } };
       break;
     }
     default:

@@ -49,6 +49,11 @@ export interface GiveawayEntry {
   type: "normal" | "simple" | "double";
 }
 
+export interface XpEntry {
+  xp: number;
+  lastMessage: number;
+}
+
 interface BotData {
   tickets: Record<string, TicketEntry>;
   ticketCounter: number;
@@ -62,6 +67,7 @@ interface BotData {
   stickers: Record<string, StickerEntry>;
   warns: Record<string, WarnEntry[]>;
   welcomeChannelId: string;
+  xp: Record<string, XpEntry>;
 }
 
 const DATA_FILE = path.resolve(process.cwd(), "bot-data.json");
@@ -72,6 +78,7 @@ function defaultData(): BotData {
   return {
     tickets: {},
     ticketCounter: 0,
+    xp: {},
     farmDescription:
       "Buy Farms – For users interested in purchasing a farm. Use this ticket for farm availability, pricing, purchase inquiries, or any questions related to buying a farm.",
     farmList: "available farms:\n\n(No farms currently listed. Check back soon!)",
@@ -366,5 +373,31 @@ export const storage = {
 
   getWelcomeChannelId(): string {
     return _data.welcomeChannelId ?? "";
+  },
+
+  getXP(userId: string): XpEntry {
+    if (!_data.xp) _data.xp = {};
+    return _data.xp[userId] ?? { xp: 0, lastMessage: 0 };
+  },
+
+  addXP(userId: string, amount: number): void {
+    if (!_data.xp) _data.xp = {};
+    const entry = _data.xp[userId] ?? { xp: 0, lastMessage: 0 };
+    entry.xp += amount;
+    entry.lastMessage = Date.now();
+    _data.xp[userId] = entry;
+    saveData(_data);
+  },
+
+  setXpCooldown(userId: string): void {
+    if (!_data.xp) _data.xp = {};
+    const entry = _data.xp[userId] ?? { xp: 0, lastMessage: 0 };
+    entry.lastMessage = Date.now();
+    _data.xp[userId] = entry;
+    saveData(_data);
+  },
+
+  getAllXP(): Record<string, XpEntry> {
+    return _data.xp ?? {};
   },
 };
