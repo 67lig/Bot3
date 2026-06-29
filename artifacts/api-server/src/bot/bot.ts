@@ -1005,6 +1005,11 @@ async function registerCommands(client: Client) {
       .setDescription("View warnings for a user (staff only)")
       .addUserOption((opt) => opt.setName("user").setDescription("User to check").setRequired(true)),
     new SlashCommandBuilder()
+      .setName("removewarn")
+      .setDescription("Remove a specific warning from a user (staff only)")
+      .addUserOption((opt) => opt.setName("user").setDescription("User to remove a warning from").setRequired(true))
+      .addIntegerOption((opt) => opt.setName("warn").setDescription("Warning number to remove (see /warns for the list)").setRequired(true).setMinValue(1)),
+    new SlashCommandBuilder()
       .setName("kick")
       .setDescription("Kick a member from the server (staff only)")
       .addUserOption((opt) => opt.setName("user").setDescription("Member to kick").setRequired(true))
@@ -1358,6 +1363,37 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       .setFooter({ text: `${warns.length} / 5 warnings` })
       .setTimestamp();
     await i.reply({ embeds: [embed], flags: 64 });
+    return;
+  }
+
+  if (commandName === "removewarn") {
+    if (!isStaff(i.member as GuildMember)) {
+      await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return;
+    }
+    const target = i.options.getUser("user", true);
+    const warnNum = i.options.getInteger("warn", true);
+    const warns = storage.getWarns(target.id);
+    if (warns.length === 0) {
+      await i.reply({ embeds: [errEmbed(`${target.username} has no warnings.`)], flags: 64 }); return;
+    }
+    if (warnNum > warns.length) {
+      await i.reply({ embeds: [errEmbed(`Invalid warning number. ${target.username} only has ${warns.length} warning${warns.length !== 1 ? "s" : ""}.`)], flags: 64 }); return;
+    }
+    const removed = warns[warnNum - 1]!;
+    storage.removeWarn(target.id, warnNum - 1);
+    const remaining = storage.getWarns(target.id).length;
+    await i.reply({
+      embeds: [new EmbedBuilder()
+        .setColor(SUCCESS_COLOR)
+        .setTitle("Warning Removed")
+        .addFields(
+          { name: "User",      value: `<@${target.id}>`,   inline: true },
+          { name: "Removed #", value: `${warnNum}`,        inline: true },
+          { name: "Remaining", value: `${remaining} / 5`,  inline: true },
+          { name: "Reason",    value: removed.reason },
+        )
+        .setTimestamp()],
+    });
     return;
   }
 
