@@ -839,6 +839,12 @@ async function registerCommands(client: Client) {
       .addStringOption((o) =>
         o.setName("amount").setDescription("Total price, e.g. 1m, 500k, 1.5b, or 250000").setRequired(false),
       ),
+    new SlashCommandBuilder()
+      .setName("purge")
+      .setDescription("Bulk delete messages from this channel (staff only)")
+      .addIntegerOption((o) =>
+        o.setName("amount").setDescription("Number of messages to delete (1–100)").setRequired(true).setMinValue(1).setMaxValue(100),
+      ),
   ].map((c) => c.toJSON());
 
   try {
@@ -1396,6 +1402,26 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     return;
   }
 
+  if (commandName === "purge") {
+    if (!isStaff(i.member as GuildMember)) {
+      await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return;
+    }
+    if (!channel || !guild) return;
+    const amount = i.options.getInteger("amount", true);
+    await i.deferReply({ flags: 64 });
+    const fetched = await (channel as TextChannel).messages.fetch({ limit: amount });
+    const deleted = await (channel as TextChannel).bulkDelete(fetched, true).catch(() => null);
+    const count = deleted?.size ?? 0;
+    const confirm = await (channel as TextChannel).send({
+      embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR)
+        .setDescription(`🗑️ ${count} message${count !== 1 ? "s were" : " was"} removed.`)
+        .setFooter({ text: `Purged by ${user.username}` })],
+    });
+    setTimeout(() => confirm.delete().catch(() => {}), 5000);
+    await i.editReply({ content: `✅ Deleted ${count} messages.` });
+    return;
+  }
+
   if (commandName === "buildpayment") {
     if (!channel || !guild) return;
     const channelId = channel.id;
@@ -1718,6 +1744,25 @@ async function routeMessageCommand(msg: Message, cmd: string, args: string[]): P
       commandName = "buildpayment";
       opts = { strings: { amount: args[0] ?? null } };
       break;
+    }
+    case "purge": {
+      const n = parseInt(args[0] ?? "", 10);
+      if (isNaN(n) || n < 1 || n > 100) {
+        await msg.reply({ embeds: [errEmbed("Usage: `!purge <1–100>`")] }).catch(() => {});
+        return true;
+      }
+      // Delete the !purge trigger message too, then bulk delete N messages
+      await msg.delete().catch(() => {});
+      const fetched = await (msg.channel as TextChannel).messages.fetch({ limit: n });
+      const deleted = await (msg.channel as TextChannel).bulkDelete(fetched, true).catch(() => null);
+      const count = deleted?.size ?? 0;
+      const confirm = await (msg.channel as TextChannel).send({
+        embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR)
+          .setDescription(`🗑️ ${count} message${count !== 1 ? "s were" : " was"} removed.`)
+          .setFooter({ text: `Purged by ${msg.author.username}` })],
+      });
+      setTimeout(() => confirm.delete().catch(() => {}), 5000);
+      return true;
     }
     case "sticker": {
       const sub = args[0]?.toLowerCase() ?? "";
