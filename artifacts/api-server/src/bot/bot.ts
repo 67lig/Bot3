@@ -877,7 +877,7 @@ export function createBotClient(): Client | null {
         }
 
         if (cmd === "warns") {
-          if (!member || !isStaff(member)) { await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {}); return; }
+          if (!member || !isStaff(member)) { await sendPermError(msg); return; }
           const targetId = msg.mentions.users.first()?.id ?? args[1];
           if (!targetId) { await msg.reply({ embeds: [errEmbed("Usage: `!warns @user`")] }).catch(() => {}); return; }
           const target = await msg.client.users.fetch(targetId).catch(() => null);
@@ -895,7 +895,7 @@ export function createBotClient(): Client | null {
         // Route ! commands that mirror slash commands (stats, close, rename, etc.)
         if (await routeMessageCommand(msg, cmd, args.slice(1))) return;
 
-        if (!member || !isStaff(member)) { await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {}); return; }
+        if (!member || !isStaff(member)) { await sendPermError(msg); return; }
 
         if (cmd === "warn") {
           const targetId = msg.mentions.users.first()?.id;
@@ -940,7 +940,7 @@ export function createBotClient(): Client | null {
         }
 
         if (cmd === "rules") {
-          if (!isOwnerOrCoOwner(member)) { await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {}); return; }
+          if (!isOwnerOrCoOwner(member)) { await sendPermError(msg); return; }
           const WHITE = 0xffffff;
           const ch = msg.channel as TextChannel;
 
@@ -1029,7 +1029,7 @@ export function createBotClient(): Client | null {
         }
 
         if (cmd === "setwelcome") {
-          if (!isOwnerOrCoOwner(member)) { await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {}); return; }
+          if (!isOwnerOrCoOwner(member)) { await sendPermError(msg); return; }
           const chId = msg.mentions.channels.first()?.id;
           if (!chId) { await msg.reply({ embeds: [errEmbed("Usage: `!setwelcome #channel`")] }).catch(() => {}); return; }
           storage.setWelcomeChannelId(chId);
@@ -2239,7 +2239,7 @@ async function routeMessageCommand(msg: Message, cmd: string, args: string[]): P
     }
     case "purge": {
       if (!isStaff(msg.guild!.members.cache.get(msg.author.id) as GuildMember)) {
-        await msg.reply({ embeds: [errEmbed("You don't have permission to use this command.")] }).catch(() => {});
+        await sendPermError(msg);
         return true;
       }
       const isAll = args[0]?.toLowerCase() === "all";
@@ -4542,6 +4542,14 @@ function okEmbed(msg: string) {
 }
 function errEmbed(msg: string) {
   return new EmbedBuilder().setColor(ERROR_COLOR).setDescription(msg);
+}
+async function sendPermError(msg: Message) {
+  await msg.delete().catch(() => {});
+  const notice = await (msg.channel as TextChannel).send({
+    content: `<@${msg.author.id}>`,
+    embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription("You don't have permission to use this command.\n-# Only you can see this message.")],
+  }).catch(() => null);
+  if (notice) setTimeout(() => notice.delete().catch(() => {}), 5000);
 }
 function infoEmbed(msg: string) {
   return new EmbedBuilder().setColor(BOT_COLOR).setDescription(msg);
