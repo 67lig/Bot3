@@ -148,8 +148,7 @@ function getCrossKey(msg: import("discord.js").Message): string | null {
 }
 
 // ─── Progressive punishment tracker ──────────────────────────────────────────
-// Violation counts are persisted to storage (7-day window, survives restarts)
-const VIOLATION_RESET_MS = 7 * 24 * 60 * 60 * 1000;
+// Violation counts are persisted to storage (permanent — never expire)
 const LINK_REGEX = /https?:\/\/\S+|discord\.gg\/\S+/i;
 
 async function applyProgressivePunishment(

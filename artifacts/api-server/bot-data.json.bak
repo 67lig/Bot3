@@ -3,8 +3,8 @@
   "ticketCounter": 16,
   "xp": {
     "1491457883219693720": {
-      "xp": 38,
-      "lastMessage": 1782703777079
+      "xp": 51,
+      "lastMessage": 1782703931231
     },
     "1384009855043633237": {
       "xp": 71,
@@ -326,6 +326,13 @@
         "moderatorId": "1491457883219693720",
         "moderatorTag": "v3lgh",
         "timestamp": "2026-06-29T02:57:11.091Z"
+      },
+      {
+        "userId": "1384009855043633237",
+        "reason": "test",
+        "moderatorId": "1491457883219693720",
+        "moderatorTag": "v3lgh",
+        "timestamp": "2026-06-29T03:32:18.958Z"
       }
     ]
   },

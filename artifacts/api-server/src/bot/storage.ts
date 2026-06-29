@@ -408,29 +408,19 @@ export const storage = {
     return _data.xp ?? {};
   },
 
-  // ── Violations (progressive punishment, 7-day window, persisted) ──────────
+  // ── Violations (progressive punishment, permanent — violations never expire) ──
   getViolationCount(userId: string): number {
     if (!_data.violations) _data.violations = {};
     const v = _data.violations[userId];
     if (!v) return 0;
-    if (new Date() >= new Date(v.expiresAt)) {
-      delete _data.violations[userId];
-      saveData(_data);
-      return 0;
-    }
     return v.count;
   },
 
-  incrementViolation(userId: string, windowMs: number): number {
+  incrementViolation(userId: string, _windowMs: number): number {
     if (!_data.violations) _data.violations = {};
     const v = _data.violations[userId];
-    const now = new Date();
-    if (!v || now >= new Date(v.expiresAt)) {
-      // Start fresh window
-      _data.violations[userId] = {
-        count: 1,
-        expiresAt: new Date(now.getTime() + windowMs).toISOString(),
-      };
+    if (!v) {
+      _data.violations[userId] = { count: 1, expiresAt: "9999-12-31T00:00:00.000Z" };
     } else {
       v.count += 1;
     }
