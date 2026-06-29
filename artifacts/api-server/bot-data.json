@@ -1,6 +1,12 @@
 {
   "tickets": {},
   "ticketCounter": 16,
+  "xp": {
+    "1491457883219693720": {
+      "xp": 25,
+      "lastMessage": 1782698206268
+    }
+  },
   "farmDescription": "Buy Farms – For users interested in purchasing a farm. Use this ticket for farm availability, pricing, purchase inquiries, or any questions related to buying a farm.",
   "farmList": "Available farms:\nNone\n\n** CURRENTLY LOOKING FOR BUILDERS, MAKE A SUPPORT TICKET TO APPLY **\n\n\n\nMining Services: 1k Per Block",
   "skellyDescription": ":skelly:  Buy/Sell Skellys – For purchase questions, payment issues, donation inquiries, reward claims, or buying/selling Skelly Spawners.",
@@ -293,6 +299,13 @@
       "messageId": "1520877115095121960",
       "text": "-# Minimum 25 vouches required to post or trade here, with 0 scam vouches. Make a support ticket if you got proof.",
       "createdAt": "2026-06-28T19:42:07.640Z"
+    },
+    "1520971456669024396": {
+      "channelId": "1503988954490470461",
+      "guildId": "1450662191890956322",
+      "messageId": "1520971456669024396",
+      "text": "-# Vouches must be in the vouch <member> reason",
+      "createdAt": "2026-06-29T01:57:33.671Z"
     }
   },
   "warns": {},

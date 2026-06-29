@@ -61,6 +61,8 @@ import {
   SKELLY_TICKET_ROLE_ID,
   OWNER_ROLE_ID,
   STAFF_APP_RESPONSES_CHANNEL_ID,
+  LEVELUP_CHANNEL_ID,
+  SPAM_LOG_CHANNEL_ID,
 } from "./config.js";
 import { storage, type GiveawayEntry, type WarnEntry } from "./storage.js";
 
@@ -79,6 +81,31 @@ const activeClaimTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const activeStaffApplications = new Set<string>();
 const pendingPriceConfirms = new Map<string, { price: number; priceStr: string; builderId: string }>();
 const activePaymentPolls = new Map<string, { price: number; priceStr: string; baseBalance: number; intervalId: ReturnType<typeof setInterval>; guildId: string; userId: string }>();
+
+// ─── XP / Level system ────────────────────────────────────────────────────────
+// Starts easy (level 10 reachable in ~2 hrs), grows steeply after
+function xpForNextLevel(level: number): number {
+  return Math.floor(60 + level * 15 + level * level * 5);
+}
+function computeLevel(totalXp: number): { level: number; currentXp: number; neededXp: number } {
+  let level = 0;
+  let remaining = totalXp;
+  while (remaining >= xpForNextLevel(level)) {
+    remaining -= xpForNextLevel(level);
+    level++;
+  }
+  return { level, currentXp: remaining, neededXp: xpForNextLevel(level) };
+}
+
+// ─── Spam detection ───────────────────────────────────────────────────────────
+const spamTracker    = new Map<string, number[]>();          // userId → timestamps
+const spamCooldown   = new Map<string, number>();            // userId → last alert time
+const pendingSpamAlerts = new Map<string, {                  // alertId → alert info
+  userId: string; guildId: string; channelId: string; snippets: string[];
+}>();
+const SPAM_WINDOW_MS    = 8_000;
+const SPAM_THRESHOLD    = 5;
+const SPAM_ALERT_CD_MS  = 30_000;
 
 async function fetchVaultBalance(): Promise<number | null> {
   try {
@@ -514,14 +541,82 @@ export function createBotClient(): Client | null {
   client.on("messageCreate", (msg) => {
     if (msg.author.bot) return;
 
-    // ── XP tracking ──
+    // ── XP tracking + level-up announcements ──
     if (msg.guild && !msg.author.bot) {
-      const now = Date.now();
-      const entry = storage.getXP(msg.author.id);
-      if (now - entry.lastMessage >= XP_COOLDOWN_MS) {
-        const gained = Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
-        storage.addXP(msg.author.id, gained);
-      }
+      void (async () => {
+        const now = Date.now();
+        const entry = storage.getXP(msg.author.id);
+        if (now - entry.lastMessage >= XP_COOLDOWN_MS) {
+          const gained = Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
+          const oldLevel = computeLevel(entry.xp).level;
+          storage.addXP(msg.author.id, gained);
+          const newEntry = storage.getXP(msg.author.id);
+          const newLevel = computeLevel(newEntry.xp).level;
+          if (newLevel > oldLevel && newLevel >= 1 && newLevel <= 100) {
+            const lvlCh = msg.guild.channels.cache.get(LEVELUP_CHANNEL_ID) as TextChannel | null;
+            if (lvlCh) {
+              const embed = new EmbedBuilder()
+                .setColor(0xf1c40f)
+                .setAuthor({ name: msg.author.username, iconURL: msg.author.displayAvatarURL() })
+                .setTitle("🎉 Level Up!")
+                .setDescription(`<@${msg.author.id}> just reached **Level ${newLevel}**!`)
+                .addFields({ name: "Total XP", value: `${newEntry.xp.toLocaleString()} XP`, inline: true })
+                .setTimestamp();
+              await lvlCh.send({ embeds: [embed] }).catch(() => {});
+            }
+          }
+        }
+
+        // ── Spam detection ──
+        const timestamps = spamTracker.get(msg.author.id) ?? [];
+        timestamps.push(now);
+        // Keep only timestamps within the spam window
+        const recent = timestamps.filter((t) => now - t < SPAM_WINDOW_MS);
+        spamTracker.set(msg.author.id, recent);
+
+        if (recent.length >= SPAM_THRESHOLD) {
+          const lastAlert = spamCooldown.get(msg.author.id) ?? 0;
+          if (now - lastAlert >= SPAM_ALERT_CD_MS) {
+            spamCooldown.set(msg.author.id, now);
+            const alertId = `${msg.author.id}_${now}`;
+            const snippets = recent.slice(-3).map(() => msg.content.slice(0, 60));
+            pendingSpamAlerts.set(alertId, {
+              userId: msg.author.id,
+              guildId: msg.guild.id,
+              channelId: msg.channelId,
+              snippets,
+            });
+
+            const spamCh = msg.guild.channels.cache.get(SPAM_LOG_CHANNEL_ID) as TextChannel | null;
+            if (spamCh) {
+              const member = msg.guild.members.cache.get(msg.author.id);
+              const joinedAt = member?.joinedAt;
+              const embed = new EmbedBuilder()
+                .setColor(0xffa500)
+                .setAuthor({ name: "⚠️ Spam Detected", iconURL: msg.guild.iconURL() ?? undefined })
+                .setThumbnail(msg.author.displayAvatarURL())
+                .addFields(
+                  { name: "User", value: `<@${msg.author.id}> (\`${msg.author.username}\`)`, inline: false },
+                  { name: "ID", value: `\`${msg.author.id}\``, inline: true },
+                  { name: "Account Created", value: `<t:${Math.floor(msg.author.createdTimestamp / 1000)}:R>`, inline: true },
+                  { name: "Joined Server", value: joinedAt ? `<t:${Math.floor(joinedAt.getTime() / 1000)}:R>` : "Unknown", inline: true },
+                  { name: "Channel", value: `<#${msg.channelId}>`, inline: true },
+                  { name: "Messages in 8s", value: `${recent.length}`, inline: true },
+                  { name: "Highlighted Message(s)", value: snippets.map((s) => `> ${s || "(empty)"}`).join("\n").slice(0, 512), inline: false },
+                )
+                .setTimestamp();
+
+              const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId(`spam_action_${alertId}`).setLabel("Take action").setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`spam_ignore_${alertId}`).setLabel("Ignore").setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`spam_info_${alertId}`).setLabel("User info").setStyle(ButtonStyle.Secondary),
+              );
+
+              await spamCh.send({ embeds: [embed], components: [row] }).catch(() => {});
+            }
+          }
+        }
+      })();
     }
 
     // ── !-prefix message commands ──
@@ -1466,20 +1561,6 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     const target = i.options.getUser("user", false) ?? user;
     const member = guild?.members.cache.get(target.id) ?? await guild?.members.fetch(target.id).catch(() => null);
 
-    // XP level formula (MEE6-style): XP needed for level N → level N+1 = 5N² + 50N + 100
-    function xpForNextLevel(level: number): number {
-      return 5 * level * level + 50 * level + 100;
-    }
-    function computeLevel(totalXp: number): { level: number; currentXp: number; neededXp: number } {
-      let level = 0;
-      let remaining = totalXp;
-      while (remaining >= xpForNextLevel(level)) {
-        remaining -= xpForNextLevel(level);
-        level++;
-      }
-      return { level, currentXp: remaining, neededXp: xpForNextLevel(level) };
-    }
-
     const entry = storage.getXP(target.id);
     const totalXp = entry.xp;
     const { level, currentXp, neededXp } = computeLevel(totalXp);
@@ -1844,22 +1925,45 @@ async function routeMessageCommand(msg: Message, cmd: string, args: string[]): P
       break;
     }
     case "purge": {
-      const n = parseInt(args[0] ?? "", 10);
-      if (isNaN(n) || n < 1 || n > 100) {
-        await msg.reply({ embeds: [errEmbed("Usage: `!purge <1–100>`")] }).catch(() => {});
+      const isAll = args[0]?.toLowerCase() === "all";
+      const n = isAll ? null : parseInt(args[0] ?? "", 10);
+      if (!isAll && (isNaN(n!) || n! < 1 || n! > 100)) {
+        await msg.reply({ embeds: [errEmbed("Usage: `!purge all` or `!purge <1–100>`")] }).catch(() => {});
         return true;
       }
-      // Delete the !purge trigger message too, then bulk delete N messages
       await msg.delete().catch(() => {});
-      const fetched = await (msg.channel as TextChannel).messages.fetch({ limit: n });
-      const deleted = await (msg.channel as TextChannel).bulkDelete(fetched, true).catch(() => null);
-      const count = deleted?.size ?? 0;
-      const confirm = await (msg.channel as TextChannel).send({
-        embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR)
-          .setDescription(`🗑️ ${count} message${count !== 1 ? "s were" : " was"} removed.`)
-          .setFooter({ text: `Purged by ${msg.author.username}` })],
-      });
-      setTimeout(() => confirm.delete().catch(() => {}), 5000);
+      const ch = msg.channel as TextChannel;
+      if (isAll) {
+        // Batch-delete ALL messages (Discord only allows bulk-delete for <14 day old messages, 100 at a time)
+        let totalDeleted = 0;
+        let lastId: string | undefined;
+        for (let attempt = 0; attempt < 500; attempt++) {
+          const batch = await ch.messages.fetch({ limit: 100, ...(lastId ? { before: lastId } : {}) }).catch(() => null);
+          if (!batch || batch.size === 0) break;
+          const deletable = batch.filter((m) => Date.now() - m.createdTimestamp < 14 * 24 * 60 * 60 * 1000);
+          if (deletable.size === 0) { lastId = batch.last()?.id; continue; }
+          const del = await ch.bulkDelete(deletable, true).catch(() => null);
+          totalDeleted += del?.size ?? 0;
+          if (batch.size < 100) break;
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        const confirm = await ch.send({
+          embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR)
+            .setDescription(`🗑️ Purged **${totalDeleted}** messages.`)
+            .setFooter({ text: `Purged by ${msg.author.username}` })],
+        });
+        setTimeout(() => confirm.delete().catch(() => {}), 5000);
+      } else {
+        const fetched = await ch.messages.fetch({ limit: n! });
+        const deleted = await ch.bulkDelete(fetched, true).catch(() => null);
+        const count = deleted?.size ?? 0;
+        const confirm = await ch.send({
+          embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR)
+            .setDescription(`🗑️ ${count} message${count !== 1 ? "s were" : " was"} removed.`)
+            .setFooter({ text: `Purged by ${msg.author.username}` })],
+        });
+        setTimeout(() => confirm.delete().catch(() => {}), 5000);
+      }
       return true;
     }
     case "sticker": {
@@ -2841,6 +2945,110 @@ async function handleButton(i: ButtonInteraction) {
       );
       await i.showModal(modal); return;
     }
+  }
+
+  // ── Spam alert buttons ──────────────────────────────────────────────────────
+  if (customId.startsWith("spam_ignore_")) {
+    if (!isStaff(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return; }
+    const alertId = customId.slice("spam_ignore_".length);
+    pendingSpamAlerts.delete(alertId);
+    await i.update({
+      embeds: [new EmbedBuilder().setColor(0x555555).setDescription(`✅ Alert dismissed by <@${user.id}>.`)],
+      components: [],
+    });
+    return;
+  }
+
+  if (customId.startsWith("spam_info_")) {
+    if (!isStaff(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return; }
+    const alertId = customId.slice("spam_info_".length);
+    const alert = pendingSpamAlerts.get(alertId);
+    if (!alert) { await i.reply({ embeds: [errEmbed("Alert expired.")], flags: 64 }); return; }
+    const targetUser = await i.client.users.fetch(alert.userId).catch(() => null);
+    const member = guild?.members.cache.get(alert.userId) ?? await guild?.members.fetch(alert.userId).catch(() => null);
+    const embed = new EmbedBuilder()
+      .setColor(BOT_COLOR)
+      .setTitle("User Info")
+      .setThumbnail(targetUser?.displayAvatarURL() ?? null)
+      .addFields(
+        { name: "Username", value: targetUser ? `${targetUser.username}` : alert.userId, inline: true },
+        { name: "ID", value: `\`${alert.userId}\``, inline: true },
+        { name: "Account Created", value: targetUser ? `<t:${Math.floor(targetUser.createdTimestamp / 1000)}:R>` : "Unknown", inline: true },
+        { name: "Joined Server", value: member?.joinedAt ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>` : "Unknown", inline: true },
+        { name: "Roles", value: member ? [...member.roles.cache.values()].filter((r) => r.id !== guild?.id).map((r) => `<@&${r.id}>`).join(", ").slice(0, 512) || "None" : "Unknown", inline: false },
+        { name: "Warnings", value: `${storage.getWarns(alert.userId).length} / 5`, inline: true },
+      )
+      .setTimestamp();
+    await i.reply({ embeds: [embed], flags: 64 });
+    return;
+  }
+
+  if (customId.startsWith("spam_action_")) {
+    if (!isStaff(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return; }
+    const alertId = customId.slice("spam_action_".length);
+    const alert = pendingSpamAlerts.get(alertId);
+    if (!alert) { await i.reply({ embeds: [errEmbed("Alert expired.")], flags: 64 }); return; }
+    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`spam_do_warn_${alertId}`).setLabel("⚠️ Warn").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`spam_do_kick_${alertId}`).setLabel("👢 Kick").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`spam_do_ban_${alertId}`).setLabel("🔨 Ban").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`spam_do_timeout_${alertId}`).setLabel("⏱️ Timeout 10m").setStyle(ButtonStyle.Secondary),
+    );
+    await i.reply({
+      embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("Take Action").setDescription(`Choose an action for <@${alert.userId}>:`)],
+      components: [actionRow],
+      flags: 64,
+    });
+    return;
+  }
+
+  if (customId.startsWith("spam_do_")) {
+    if (!isStaff(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return; }
+    const withoutPrefix = customId.slice("spam_do_".length);
+    const underscoreIdx = withoutPrefix.indexOf("_");
+    const action = withoutPrefix.slice(0, underscoreIdx);
+    const alertId = withoutPrefix.slice(underscoreIdx + 1);
+    const alert = pendingSpamAlerts.get(alertId);
+    if (!alert) { await i.reply({ embeds: [errEmbed("Alert expired.")], flags: 64 }); return; }
+    if (!guild) { await i.reply({ embeds: [errEmbed("Guild not found.")], flags: 64 }); return; }
+    const target = await guild.members.fetch(alert.userId).catch(() => null);
+    if (!target) { await i.reply({ embeds: [errEmbed("Member not found (may have left).")], flags: 64 }); return; }
+
+    if (action === "warn") {
+      const warn: WarnEntry = { userId: alert.userId, reason: "Spam detected by AutoMod", moderatorId: user.id, moderatorTag: user.username, timestamp: new Date().toISOString() };
+      const count = storage.addWarn(alert.userId, warn);
+      pendingSpamAlerts.delete(alertId);
+      await i.update({
+        embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`⚠️ <@${alert.userId}> warned for spam. **(${count}/5 warnings)**`)],
+        components: [],
+      });
+      target.user.send({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("⚠️ You have been warned").setDescription("**Reason:** Spamming\n**Warnings:** " + count + " / 5")] }).catch(() => {});
+      if (count >= 5 && target.bannable) await target.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
+    } else if (action === "kick") {
+      if (!target.kickable) { await i.reply({ embeds: [errEmbed("I cannot kick this member.")], flags: 64 }); return; }
+      await target.kick("Spam detected by AutoMod").catch(() => {});
+      pendingSpamAlerts.delete(alertId);
+      await i.update({
+        embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`👢 <@${alert.userId}> kicked for spam.`)],
+        components: [],
+      });
+    } else if (action === "ban") {
+      if (!target.bannable) { await i.reply({ embeds: [errEmbed("I cannot ban this member.")], flags: 64 }); return; }
+      await target.ban({ reason: "Spam detected by AutoMod" }).catch(() => {});
+      pendingSpamAlerts.delete(alertId);
+      await i.update({
+        embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`🔨 <@${alert.userId}> banned for spam.`)],
+        components: [],
+      });
+    } else if (action === "timeout") {
+      await target.timeout(10 * 60 * 1000, "Spam detected by AutoMod").catch(() => {});
+      pendingSpamAlerts.delete(alertId);
+      await i.update({
+        embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`⏱️ <@${alert.userId}> timed out for 10 minutes for spam.`)],
+        components: [],
+      });
+    }
+    return;
   }
 }
 
