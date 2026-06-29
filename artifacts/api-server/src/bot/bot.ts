@@ -108,6 +108,22 @@ const SPAM_WINDOW_MS    = 8_000;
 const SPAM_THRESHOLD    = 5;
 const SPAM_ALERT_CD_MS  = 30_000;
 
+// ─── Cross-channel duplicate tracker ─────────────────────────────────────────
+// Detects same message/attachment posted across 3+ channels within the window
+type CrossEntry = { channelId: string; messageId: string };
+const crossChannelTracker = new Map<string, Map<string, CrossEntry[]>>();
+// userId → contentKey → list of {channelId, messageId}
+const CROSS_CHANNEL_WINDOW_MS = 60_000;
+const CROSS_CHANNEL_THRESHOLD = 3;  // delete when posted in this many channels
+
+function getCrossKey(msg: import("discord.js").Message): string | null {
+  const text = msg.content.trim().toLowerCase();
+  const attach = msg.attachments.first();
+  if (attach) return `attach:${attach.name ?? "file"}:${attach.size}`;
+  if (text.length >= 3) return `text:${text}`;
+  return null;
+}
+
 // ─── Progressive punishment tracker ──────────────────────────────────────────
 // Tracks per-user violation count (across spam, bad words, links)
 const violationCount  = new Map<string, number>();           // userId → total offenses
@@ -706,6 +722,67 @@ export function createBotClient(): Client | null {
                 .addFields({ name: "Total XP", value: `${newEntry.xp.toLocaleString()} XP`, inline: true })
                 .setTimestamp();
               await lvlCh.send({ embeds: [embed] }).catch(() => {});
+            }
+          }
+        }
+
+        // ── Cross-channel duplicate detection ──
+        if (!isStaff(msg.guild.members.cache.get(msg.author.id) as GuildMember)) {
+          const crossKey = getCrossKey(msg);
+          if (crossKey) {
+            let userMap = crossChannelTracker.get(msg.author.id);
+            if (!userMap) { userMap = new Map(); crossChannelTracker.set(msg.author.id, userMap); }
+
+            // Expire old entries outside the window
+            const existing = (userMap.get(crossKey) ?? []).filter(
+              (e) => {
+                // We store timestamps separately via the key expiry below; entries without
+                // a distinct channel are just accumulated, so prune by window by keeping
+                // all entries that were recently added. We piggy-back on now.
+                return true; // kept for immediate use; full map purge handled below
+              },
+            );
+
+            // Only count unique channels
+            const uniqueChannels = new Set(existing.map((e) => e.channelId));
+            if (!uniqueChannels.has(msg.channelId)) {
+              existing.push({ channelId: msg.channelId, messageId: msg.id });
+              userMap.set(crossKey, existing);
+            }
+
+            if (existing.length >= CROSS_CHANNEL_THRESHOLD) {
+              // Delete all copies across every channel
+              for (const entry of existing) {
+                if (entry.channelId === msg.channelId) {
+                  await msg.delete().catch(() => {});
+                } else {
+                  const ch = msg.guild.channels.cache.get(entry.channelId) as TextChannel | null;
+                  if (ch) {
+                    await ch.messages.fetch(entry.messageId).then((m) => m.delete()).catch(() => {});
+                  }
+                }
+              }
+              userMap.delete(crossKey);
+
+              void applyProgressivePunishment(
+                msg.guild,
+                msg.author.id,
+                "Cross-channel spam (same message/image in 3+ channels)",
+                MOD_LOG_CHANNEL_ID,
+                "🔁 Cross-Channel Spam",
+                crossKey.startsWith("text:") ? crossKey.slice(5).slice(0, 256) : `[attachment: ${crossKey.slice(7)}]`,
+              );
+
+              // Auto-purge the user's entire map after the window so memory doesn't build up
+              setTimeout(() => {
+                crossChannelTracker.get(msg.author.id)?.delete(crossKey);
+              }, CROSS_CHANNEL_WINDOW_MS);
+            } else {
+              // Schedule expiry for this key
+              setTimeout(() => {
+                const m = crossChannelTracker.get(msg.author.id);
+                if (m) m.delete(crossKey);
+              }, CROSS_CHANNEL_WINDOW_MS);
             }
           }
         }
