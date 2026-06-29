@@ -543,7 +543,7 @@ export function createBotClient(): Client | null {
         }
 
         // Route ! commands that mirror slash commands (stats, close, rename, etc.)
-        if (await routeMessageCommand(msg, cmd, args)) return;
+        if (await routeMessageCommand(msg, cmd, args.slice(1))) return;
 
         if (!member || !isStaff(member)) return;
 
@@ -1626,14 +1626,12 @@ class MsgCtx {
   }
 
   async deferReply(_opts?: unknown) {
-    this._pending = await (this._msg.channel as TextChannel)
-      .send({ content: "⏳ Processing…" }).catch(() => null);
+    // No-op for message commands — we reply directly when ready
   }
 
   async editReply(payload: Record<string, unknown>) {
     const { flags: _f, ...rest } = payload;
-    if (this._pending) await this._pending.edit(rest as MessageEditOptions).catch(() => {});
-    else await (this._msg.channel as TextChannel).send(rest as MessageCreateOptions).catch(() => {});
+    await (this._msg.channel as TextChannel).send(rest as MessageCreateOptions).catch(() => {});
   }
 
   async reply(payload: Record<string, unknown>) {
