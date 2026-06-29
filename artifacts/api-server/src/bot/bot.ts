@@ -86,7 +86,7 @@ const activePaymentPolls = new Map<string, { price: number; priceStr: string; ba
 // ─── XP / Level system ────────────────────────────────────────────────────────
 // Starts easy (level 10 reachable in ~2 hrs), grows steeply after
 function xpForNextLevel(level: number): number {
-  return Math.floor(60 + level * 15 + level * level * 5);
+  return Math.floor(20 + level * 5 + level * level * 2);
 }
 function computeLevel(totalXp: number): { level: number; currentXp: number; neededXp: number } {
   let level = 0;
@@ -679,9 +679,9 @@ export function createBotClient(): Client | null {
     }
   });
 
-  const XP_COOLDOWN_MS = 60_000;
-  const XP_MIN = 15;
-  const XP_MAX = 25;
+  const XP_COOLDOWN_MS = 5_000;
+  const XP_MIN = 2;
+  const XP_MAX = 4;
 
   client.on("messageCreate", (msg) => {
     if (msg.author.bot) return;
