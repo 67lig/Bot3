@@ -877,6 +877,7 @@ export function createBotClient(): Client | null {
         }
 
         if (cmd === "warns") {
+          if (!member || !isStaff(member)) return;
           const targetId = msg.mentions.users.first()?.id ?? args[1];
           if (!targetId) { await msg.reply({ embeds: [errEmbed("Usage: `!warns @user`")] }).catch(() => {}); return; }
           const target = await msg.client.users.fetch(targetId).catch(() => null);
