@@ -32,6 +32,10 @@ import {
   type ModalSubmitInteraction,
   type ChatInputCommandInteraction,
   type ChannelSelectMenuInteraction,
+  type Message,
+  type MessageEditOptions,
+  type MessageCreateOptions,
+  type ReplyOptions,
 } from "discord.js";
 
 import { logger } from "../lib/logger.js";
@@ -538,6 +542,9 @@ export function createBotClient(): Client | null {
           return;
         }
 
+        // Route ! commands that mirror slash commands (stats, close, rename, etc.)
+        if (await routeMessageCommand(msg, cmd, args)) return;
+
         if (!member || !isStaff(member)) return;
 
         if (cmd === "warn") {
@@ -615,7 +622,7 @@ export function createBotClient(): Client | null {
                 ].join("\n"),
               },
               {
-                name: "Section 3 — Guidelines",
+                name: "Section 3 — Guidelines (3.1–3.4)",
                 value: [
                   "────────────────────────────",
                   "**3.1 No Direct or Indirect Threats** – Any threats involving DDoS, doxxing, violence, hacking, or harm toward another member are strictly prohibited. Even joking about these topics can result in action.",
@@ -625,7 +632,11 @@ export function createBotClient(): Client | null {
                   "**3.3 Be Respectful at All Times** – Harassment, bullying, discrimination, or targeting other members will not be tolerated. Keep interactions mature and respectful.",
                   "",
                   "**3.4 No Pornographic or NSFW Content** – Explicit, adult, or otherwise inappropriate material is not permitted in any channel.",
-                  "",
+                ].join("\n"),
+              },
+              {
+                name: "Section 3 — Guidelines (3.5–3.8)",
+                value: [
                   "**3.5 No Spamming or Flooding** – Avoid sending repeated messages, excessive emojis, all caps, or disrupting conversations with unnecessary content.",
                   "",
                   "**3.6 Appropriate Usernames & Profile Pictures** – Names and profile pictures must remain appropriate. Staff may require changes if something is considered offensive.",
@@ -1564,6 +1575,189 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       return;
     }
   }
+}
+
+// ─── Message → Interaction Adapter ──────────────────────────────────────────
+// Wraps a Message so handleCommand() can be called from ! prefix commands.
+
+type MsgOptMap = {
+  strings?:  Record<string, string | null>;
+  users?:    Record<string, User | null>;
+  members?:  Record<string, GuildMember | null>;
+  integers?: Record<string, number | null>;
+  subcommand?: string;
+};
+
+class MsgCtx {
+  commandName: string;
+  user: User;
+  guild: Guild | null;
+  channel: TextChannel | null;
+  channelId: string;
+  guildId: string | null;
+  member: GuildMember | null;
+  options: {
+    getString(name: string, req?: boolean): string | null;
+    getUser(name: string, req?: boolean): User | null;
+    getMember(name: string): GuildMember | null;
+    getInteger(name: string, req?: boolean): number | null;
+    getSubcommand(req?: boolean): string;
+  };
+
+  private _msg: Message;
+  private _pending: Message | null = null;
+
+  constructor(msg: Message, commandName: string, opts: MsgOptMap) {
+    this.commandName = commandName;
+    this.user        = msg.author;
+    this.guild       = msg.guild;
+    this.channel     = msg.channel as TextChannel;
+    this.channelId   = msg.channelId;
+    this.guildId     = msg.guildId;
+    this.member      = msg.member;
+    this._msg        = msg;
+    this.options = {
+      getString:     (name) => opts.strings?.[name]  ?? null,
+      getUser:       (name) => opts.users?.[name]    ?? null,
+      getMember:     (name) => opts.members?.[name]  ?? null,
+      getInteger:    (name) => opts.integers?.[name] ?? null,
+      getSubcommand: ()     => opts.subcommand ?? "",
+    };
+  }
+
+  async deferReply(_opts?: unknown) {
+    this._pending = await (this._msg.channel as TextChannel)
+      .send({ content: "⏳ Processing…" }).catch(() => null);
+  }
+
+  async editReply(payload: Record<string, unknown>) {
+    const { flags: _f, ...rest } = payload;
+    if (this._pending) await this._pending.edit(rest as MessageEditOptions).catch(() => {});
+    else await (this._msg.channel as TextChannel).send(rest as MessageCreateOptions).catch(() => {});
+  }
+
+  async reply(payload: Record<string, unknown>) {
+    const { flags: _f, ...rest } = payload;
+    await this._msg.reply(rest as ReplyOptions).catch(() => {});
+  }
+
+  async followUp(payload: Record<string, unknown>) {
+    const { flags: _f, ...rest } = payload;
+    await (this._msg.channel as TextChannel).send(rest as MessageCreateOptions).catch(() => {});
+  }
+
+  async showModal(_modal: unknown) {
+    await this._msg.reply({
+      embeds: [errEmbed("This action requires the slash command — use `/giveaway create` instead.")],
+    }).catch(() => {});
+  }
+}
+
+async function routeMessageCommand(msg: Message, cmd: string, args: string[]): Promise<boolean> {
+  if (!msg.guild) return false;
+  const guild          = msg.guild;
+  const mentioned      = msg.mentions.users.first() ?? null;
+  const mentionedMember = mentioned ? (guild.members.cache.get(mentioned.id) ?? null) : null;
+  // Strip leading mention tokens so positional text args work cleanly
+  const restArgs = args.filter((a) => !a.startsWith("<@"));
+
+  let commandName: string;
+  let opts: MsgOptMap;
+
+  switch (cmd) {
+    case "stats": {
+      if (!args[0]) {
+        await msg.reply({ embeds: [errEmbed("Usage: `!stats <username>`")] }).catch(() => {});
+        return true;
+      }
+      commandName = "stats";
+      opts = { strings: { username: args[0] } };
+      break;
+    }
+    case "panel": {
+      commandName = "panel";
+      opts = {};
+      break;
+    }
+    case "close": {
+      commandName = "close";
+      opts = { strings: { reason: restArgs.join(" ") || null } };
+      break;
+    }
+    case "rename": {
+      if (!args[0]) {
+        await msg.reply({ embeds: [errEmbed("Usage: `!rename <new-name>`")] }).catch(() => {});
+        return true;
+      }
+      commandName = "rename";
+      opts = { strings: { name: args.join(" ") } };
+      break;
+    }
+    case "add": {
+      if (!mentioned) {
+        await msg.reply({ embeds: [errEmbed("Usage: `!add @user`")] }).catch(() => {});
+        return true;
+      }
+      commandName = "add";
+      opts = { users: { user: mentioned }, members: { user: mentionedMember } };
+      break;
+    }
+    case "remove": {
+      if (!mentioned) {
+        await msg.reply({ embeds: [errEmbed("Usage: `!remove @user`")] }).catch(() => {});
+        return true;
+      }
+      commandName = "remove";
+      opts = { users: { user: mentioned }, members: { user: mentionedMember } };
+      break;
+    }
+    case "tickets": {
+      commandName = "tickets";
+      opts = {};
+      break;
+    }
+    case "buildpayment": {
+      commandName = "buildpayment";
+      opts = { strings: { amount: args[0] ?? null } };
+      break;
+    }
+    case "sticker": {
+      const sub = args[0]?.toLowerCase() ?? "";
+      if (!sub) {
+        await msg.reply({ embeds: [errEmbed("Usage: `!sticker post|edit|delete|list [args]`")] }).catch(() => {});
+        return true;
+      }
+      commandName = "sticker";
+      opts = {
+        subcommand: sub,
+        strings: {
+          id:   (sub === "edit" || sub === "delete") ? (args[1] ?? null) : null,
+          text: sub === "post"  ? (args.slice(1).join(" ") || null)
+              : sub === "edit"  ? (args.slice(2).join(" ") || null)
+              : null,
+        },
+      };
+      break;
+    }
+    case "giveaway": {
+      const sub = args[0]?.toLowerCase() ?? "";
+      if (!sub) {
+        await msg.reply({ embeds: [errEmbed("Usage: `!giveaway reroll|end|info <id>` (to create a giveaway use `/giveaway create`)")] }).catch(() => {});
+        return true;
+      }
+      commandName = "giveaway";
+      opts = { subcommand: sub, strings: { id: args[1] ?? null } };
+      break;
+    }
+    default:
+      return false; // not handled here — let existing handlers deal with it
+  }
+
+  const ctx = new MsgCtx(msg, commandName, opts);
+  await handleCommand(ctx as unknown as ChatInputCommandInteraction).catch((e) => {
+    logger.error({ err: e }, `!${cmd} error`);
+  });
+  return true;
 }
 
 async function handleButton(i: ButtonInteraction) {
