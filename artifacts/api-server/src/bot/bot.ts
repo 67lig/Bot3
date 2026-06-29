@@ -591,38 +591,47 @@ export function createBotClient(): Client | null {
 
         if (cmd === "rules") {
           if (!isOwnerOrCoOwner(member)) return;
-          const rulesEmbed = new EmbedBuilder()
-            .setColor(BOT_COLOR)
+          const WHITE = 0xffffff;
+          const ch = msg.channel as TextChannel;
+
+          const section1 = new EmbedBuilder()
+            .setColor(WHITE)
             .setTitle("V4 Sanctuary Rules")
+            .addFields({
+              name: "Section 1 — The Preamble",
+              value: [
+                "────────────────────────────",
+                "By joining (and participating in this server), you agree to follow all established rules, including any updates or changes made in the future.",
+                "",
+                "Please keep your direct messages enabled. If disciplinary action is taken against you, staff will contact you with the reason for the punishment.",
+                "",
+                "The rules listed here are not exhaustive. Staff retain full authority to address behavior that violates the spirit of the community, even if it is not specifically mentioned.",
+              ].join("\n"),
+            });
+
+          const section2 = new EmbedBuilder()
+            .setColor(WHITE)
+            .addFields({
+              name: "Section 2 — Terms and Services",
+              value: [
+                "────────────────────────────",
+                "You must listen to [Discord's Terms of Service](https://discord.com/terms) at all times.",
+                "",
+                "By being part of this server, you agree to follow Discord's Community Guidelines to help maintain a safe and respectful environment.",
+                "",
+                "**To join the official V4 server, you must be at least 13 years old.**",
+                "",
+                "Do not discuss, promote, or admit to violating Discord's Terms of Service (e.g., scamming, distributing malicious content, evading bans).",
+                "",
+                "Any content that violates Discord's Terms of Service or Community Guidelines will be removed and may result in disciplinary action, including a ban. This includes, but is not limited to: harassment, scams, malicious links, or sharing inappropriate content.",
+              ].join("\n"),
+            });
+
+          const section3 = new EmbedBuilder()
+            .setColor(WHITE)
             .addFields(
               {
-                name: "Section 1 — The Preamble",
-                value: [
-                  "────────────────────────────",
-                  "By joining (and participating in this server), you agree to follow all established rules, including any updates or changes made in the future.",
-                  "",
-                  "Please keep your direct messages enabled. If disciplinary action is taken against you, staff will contact you with the reason for the punishment.",
-                  "",
-                  "The rules listed here are not exhaustive. Staff retain full authority to address behavior that violates the spirit of the community, even if it is not specifically mentioned.",
-                ].join("\n"),
-              },
-              {
-                name: "Section 2 — Terms and Services",
-                value: [
-                  "────────────────────────────",
-                  "You must listen to [Discord's Terms of Service](https://discord.com/terms) at all times.",
-                  "",
-                  "By being part of this server, you agree to follow Discord's Community Guidelines to help maintain a safe and respectful environment.",
-                  "",
-                  "**To join the official V4 server, you must be at least 13 years old.**",
-                  "",
-                  "Do not discuss, promote, or admit to violating Discord's Terms of Service (e.g., scamming, distributing malicious content, evading bans).",
-                  "",
-                  "Any content that violates Discord's Terms of Service or Community Guidelines will be removed and may result in disciplinary action, including a ban. This includes, but is not limited to: harassment, scams, malicious links, or sharing inappropriate content.",
-                ].join("\n"),
-              },
-              {
-                name: "Section 3 — Guidelines (3.1–3.4)",
+                name: "Section 3 — Guidelines",
                 value: [
                   "────────────────────────────",
                   "**3.1 No Direct or Indirect Threats** – Any threats involving DDoS, doxxing, violence, hacking, or harm toward another member are strictly prohibited. Even joking about these topics can result in action.",
@@ -632,11 +641,7 @@ export function createBotClient(): Client | null {
                   "**3.3 Be Respectful at All Times** – Harassment, bullying, discrimination, or targeting other members will not be tolerated. Keep interactions mature and respectful.",
                   "",
                   "**3.4 No Pornographic or NSFW Content** – Explicit, adult, or otherwise inappropriate material is not permitted in any channel.",
-                ].join("\n"),
-              },
-              {
-                name: "Section 3 — Guidelines (3.5–3.8)",
-                value: [
+                  "",
                   "**3.5 No Spamming or Flooding** – Avoid sending repeated messages, excessive emojis, all caps, or disrupting conversations with unnecessary content.",
                   "",
                   "**3.6 Appropriate Usernames & Profile Pictures** – Names and profile pictures must remain appropriate. Staff may require changes if something is considered offensive.",
@@ -646,23 +651,30 @@ export function createBotClient(): Client | null {
                   "**3.8 Use Appropriate Language** – Keep profanity limited and never direct offensive, hateful, or discriminatory language toward others.",
                 ].join("\n"),
               },
-              {
-                name: "Section 4 — Reports",
-                value: [
-                  "────────────────────────────",
-                  "All violations of these guidelines must be reported.",
-                  "**How to Report:**",
-                  "• Create a ticket in <#1450662193266692288>",
-                  "• Provide a detailed explanation of the incident.",
-                  "• Include clear evidence (screenshots, message links, etc.).",
-                  "• Provide the User ID(s) of the individual(s) involved — enable Developer Mode to obtain this.",
-                ].join("\n"),
-              },
-            )
-            .setFooter({ text: "Last Updated: June 2025" })
-            .setTimestamp();
-          await (msg.channel as TextChannel).send({ embeds: [rulesEmbed] }).catch(() => {});
+            );
+
+          const section4 = new EmbedBuilder()
+            .setColor(WHITE)
+            .addFields({
+              name: "Section 4 — Reports",
+              value: [
+                "────────────────────────────",
+                "All violations of these guidelines must be reported.",
+                "",
+                "**How to Report:**",
+                "• Create a ticket in <#1450662193266692288>",
+                "• Provide a detailed explanation of the incident.",
+                "• Include clear evidence (screenshots, message links, etc.).",
+                "• Provide the User ID(s) of the individual(s) involved — enable Developer Mode to obtain this.",
+              ].join("\n"),
+            })
+            .setFooter({ text: "Last Updated: June 2025" });
+
           await msg.delete().catch(() => {});
+          await ch.send({ embeds: [section1] }).catch(() => {});
+          await ch.send({ embeds: [section2] }).catch(() => {});
+          await ch.send({ embeds: [section3] }).catch(() => {});
+          await ch.send({ embeds: [section4] }).catch(() => {});
           return;
         }
 
