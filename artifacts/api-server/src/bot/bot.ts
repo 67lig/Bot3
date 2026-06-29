@@ -149,7 +149,6 @@ function getCrossKey(msg: import("discord.js").Message): string | null {
 
 // ─── Progressive punishment tracker ──────────────────────────────────────────
 // Violation counts are persisted to storage (permanent — never expire)
-const LINK_REGEX = /https?:\/\/\S+|discord\.gg\/\S+/i;
 
 async function applyProgressivePunishment(
   guild: import("discord.js").Guild,
@@ -775,18 +774,6 @@ export function createBotClient(): Client | null {
           }
         }
 
-        // ── Link detection ──
-        if (!isStaff(msg.guild.members.cache.get(msg.author.id) as GuildMember) && LINK_REGEX.test(msg.content)) {
-          await msg.delete().catch(() => {});
-          void applyProgressivePunishment(
-            msg.guild,
-            msg.author.id,
-            "Posting links",
-            MOD_LOG_CHANNEL_ID,
-            "🔗 Link Posted",
-            msg.content.slice(0, 256),
-          );
-        }
 
         // ── Spam detection ──
         const timestamps = spamTracker.get(msg.author.id) ?? [];
