@@ -3543,12 +3543,13 @@ async function handleModal(i: ModalSubmitInteraction) {
     }
 
     const customMsg = storage.getCategoryMessage("buy-farms") ?? FARM_CATEGORY.description;
+    const farmList = storage.getData().farmList;
     const welcomeEmbed = new EmbedBuilder()
       .setColor(SUCCESS_COLOR)
       .setTitle(`Buy Farms: ${ticketTag(ticketNum)}`)
       .setDescription(customMsg)
       .addFields(...welcomeFields)
-      
+      .addFields({ name: "Available Farms", value: farmList ? farmList.slice(0, 1024) : "No farms listed." })
       .setTimestamp();
 
     const controlRow = new ActionRowBuilder<ButtonBuilder>().addComponents(

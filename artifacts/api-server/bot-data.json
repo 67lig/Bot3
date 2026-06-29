@@ -3,16 +3,20 @@
   "ticketCounter": 16,
   "xp": {
     "1491457883219693720": {
-      "xp": 85,
-      "lastMessage": 1782714374106
+      "xp": 99,
+      "lastMessage": 1782714552134
     },
     "1384009855043633237": {
       "xp": 71,
       "lastMessage": 1782702962845
     },
     "1016893982237802567": {
-      "xp": 3,
-      "lastMessage": 1782714169887
+      "xp": 11,
+      "lastMessage": 1782714480145
+    },
+    "906401073328189501": {
+      "xp": 13,
+      "lastMessage": 1782714491906
     }
   },
   "violations": {
@@ -22,7 +26,7 @@
     }
   },
   "farmDescription": "Buy Farms – For users interested in purchasing a farm. Use this ticket for farm availability, pricing, purchase inquiries, or any questions related to buying a farm.",
-  "farmList": "Available farms:\nNone\n\n** CURRENTLY LOOKING FOR BUILDERS, MAKE A SUPPORT TICKET TO APPLY **\n\n\n\nMining Services: 1k Per Block",
+  "farmList": "Available farms:\n\n66m/Hour Basalt Farm: 1.5B\n128m/Hour Basalt Farm 2.4B\n\n** CURRENTLY LOOKING FOR BUILDERS, MAKE A SUPPORT TICKET TO APPLY **\n\n\n\nMining Services: 1k Per Block",
   "skellyDescription": ":skelly:  Buy/Sell Skellys – For purchase questions, payment issues, donation inquiries, reward claims, or buying/selling Skelly Spawners.",
   "categoryMessages": {},
   "ticketPanelTitle": "Support Tickets",
