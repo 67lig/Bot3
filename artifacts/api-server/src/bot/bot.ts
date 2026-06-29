@@ -63,6 +63,7 @@ import {
   STAFF_APP_RESPONSES_CHANNEL_ID,
   LEVELUP_CHANNEL_ID,
   SPAM_LOG_CHANNEL_ID,
+  MOD_LOG_CHANNEL_ID,
 } from "./config.js";
 import { storage, type GiveawayEntry, type WarnEntry } from "./storage.js";
 
@@ -106,6 +107,121 @@ const pendingSpamAlerts = new Map<string, {                  // alertId → aler
 const SPAM_WINDOW_MS    = 8_000;
 const SPAM_THRESHOLD    = 5;
 const SPAM_ALERT_CD_MS  = 30_000;
+
+// ─── Progressive punishment tracker ──────────────────────────────────────────
+// Tracks per-user violation count (across spam, bad words, links)
+const violationCount  = new Map<string, number>();           // userId → total offenses
+const violationExpiry = new Map<string, ReturnType<typeof setTimeout>>(); // auto-reset after 24h
+const VIOLATION_RESET_MS = 24 * 60 * 60 * 1000;
+const LINK_REGEX = /https?:\/\/\S+|discord\.gg\/\S+/i;
+
+async function applyProgressivePunishment(
+  guild: import("discord.js").Guild,
+  userId: string,
+  reason: string,
+  logChannelId: string,
+  violationType: string,
+  snippet: string,
+) {
+  const prevCount = violationCount.get(userId) ?? 0;
+  const newCount = prevCount + 1;
+  violationCount.set(userId, newCount);
+
+  const existingTimer = violationExpiry.get(userId);
+  if (existingTimer) clearTimeout(existingTimer);
+  violationExpiry.set(
+    userId,
+    setTimeout(() => {
+      violationCount.delete(userId);
+      violationExpiry.delete(userId);
+    }, VIOLATION_RESET_MS),
+  );
+
+  const member = await guild.members.fetch(userId).catch(() => null);
+  const user   = member?.user ?? null;
+
+  // --- Log to unified mod log channel ---
+  const logCh = guild.channels.cache.get(logChannelId) as import("discord.js").TextChannel | undefined;
+  if (logCh) {
+    const colors = [0xffa500, 0xf0a000, 0xe06000, 0xed4245, 0xed4245];
+    const embed = new EmbedBuilder()
+      .setColor(colors[Math.min(newCount - 1, colors.length - 1)] ?? 0xffa500)
+      .setAuthor({ name: `🚨 ${violationType}`, iconURL: guild.iconURL() ?? undefined })
+      .setThumbnail(user?.displayAvatarURL() ?? null)
+      .addFields(
+        { name: "User",    value: `<@${userId}> (\`${user?.username ?? userId}\`)`, inline: true },
+        { name: "Offense", value: `#${newCount} (24h window)`,                      inline: true },
+        { name: "Reason",  value: reason,                                            inline: false },
+        { name: "Content", value: snippet.slice(0, 512) || "(none)",                inline: false },
+      )
+      .setTimestamp();
+    await logCh.send({ embeds: [embed] }).catch(() => {});
+  }
+
+  if (!member) return;
+
+  // --- Progressive actions ---
+  if (newCount === 1) {
+    // 1st: DM warning only
+    user?.send({
+      embeds: [new EmbedBuilder()
+        .setColor(WARNING_COLOR)
+        .setTitle("⚠️ Warning")
+        .setDescription(`Hey <@${userId}>, please stop **${reason.toLowerCase()}** in **${guild.name}**.\nContinuing will result in a mute.`)],
+    }).catch(() => {});
+  } else if (newCount === 2) {
+    // 2nd: 1 minute timeout
+    if (member.moderatable) {
+      await member.timeout(60_000, `Auto-punishment (offense #2): ${reason}`).catch(() => {});
+    }
+    user?.send({
+      embeds: [new EmbedBuilder()
+        .setColor(WARNING_COLOR)
+        .setTitle("⏱️ 1-Minute Mute")
+        .setDescription(`You have been muted for **1 minute** in **${guild.name}** for: ${reason}.`)],
+    }).catch(() => {});
+  } else if (newCount === 3) {
+    // 3rd: 5 minute timeout
+    if (member.moderatable) {
+      await member.timeout(5 * 60_000, `Auto-punishment (offense #3): ${reason}`).catch(() => {});
+    }
+    user?.send({
+      embeds: [new EmbedBuilder()
+        .setColor(WARNING_COLOR)
+        .setTitle("⏱️ 5-Minute Mute")
+        .setDescription(`You have been muted for **5 minutes** in **${guild.name}** for: ${reason}.`)],
+    }).catch(() => {});
+  } else if (newCount === 4) {
+    // 4th: 30 minute timeout + warn
+    if (member.moderatable) {
+      await member.timeout(30 * 60_000, `Auto-punishment (offense #4): ${reason}`).catch(() => {});
+    }
+    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #4): ${reason}`, moderatorId: "BOT", moderatorTag: "V3 BOT", timestamp: new Date().toISOString() };
+    const warnCount = storage.addWarn(userId, warnEntry);
+    user?.send({
+      embeds: [new EmbedBuilder()
+        .setColor(ERROR_COLOR)
+        .setTitle("⏱️ 30-Minute Mute + Warn")
+        .setDescription(`You have been muted for **30 minutes** and warned (**${warnCount}/5**) in **${guild.name}** for: ${reason}.`)],
+    }).catch(() => {});
+    if (warnCount >= 5 && member.bannable) {
+      await member.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
+    }
+  } else {
+    // 5th+: warn (auto-ban at 5)
+    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #${newCount}): ${reason}`, moderatorId: "BOT", moderatorTag: "V3 BOT", timestamp: new Date().toISOString() };
+    const warnCount = storage.addWarn(userId, warnEntry);
+    user?.send({
+      embeds: [new EmbedBuilder()
+        .setColor(ERROR_COLOR)
+        .setTitle("⚠️ Formal Warning")
+        .setDescription(`You have received a formal warning (**${warnCount}/5**) in **${guild.name}** for: ${reason}.`)],
+    }).catch(() => {});
+    if (warnCount >= 5 && member.bannable) {
+      await member.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
+    }
+  }
+}
 
 async function fetchVaultBalance(): Promise<number | null> {
   try {
@@ -459,6 +575,7 @@ export function createBotClient(): Client | null {
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildModeration,
       GatewayIntentBits.DirectMessages,
+      GatewayIntentBits.AutoModerationExecution,
     ],
     partials: [Partials.Channel, Partials.Message],
   });
@@ -488,6 +605,32 @@ export function createBotClient(): Client | null {
 
   client.on("guildCreate", async (guild) => {
     await setupAutoMod(guild).catch(() => {});
+  });
+
+  client.on("autoModerationActionExecution", (execution) => {
+    void (async () => {
+      const { guild, userId, content, matchedContent, ruleTriggerType } = execution;
+      if (!userId || userId === client.user?.id) return;
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member || isStaff(member)) return;
+
+      const typeLabel =
+        ruleTriggerType === AutoModerationRuleTriggerType.Keyword       ? "🤬 Bad Word Detected" :
+        ruleTriggerType === AutoModerationRuleTriggerType.KeywordPreset ? "🤬 Bad Word Detected" :
+        ruleTriggerType === AutoModerationRuleTriggerType.MentionSpam   ? "💬 Mention Spam"      :
+        "🚨 AutoMod Triggered";
+
+      const reason = typeLabel.replace(/[^ -~]/g, "").trim() || "AutoMod rule violation";
+
+      void applyProgressivePunishment(
+        guild,
+        userId,
+        reason,
+        MOD_LOG_CHANNEL_ID,
+        typeLabel,
+        (matchedContent || content || "").slice(0, 256),
+      );
+    })();
   });
 
   client.on("interactionCreate", (i) => {
@@ -567,6 +710,19 @@ export function createBotClient(): Client | null {
           }
         }
 
+        // ── Link detection ──
+        if (!isStaff(msg.guild.members.cache.get(msg.author.id) as GuildMember) && LINK_REGEX.test(msg.content)) {
+          await msg.delete().catch(() => {});
+          void applyProgressivePunishment(
+            msg.guild,
+            msg.author.id,
+            "Posting links",
+            MOD_LOG_CHANNEL_ID,
+            "🔗 Link Posted",
+            msg.content.slice(0, 256),
+          );
+        }
+
         // ── Spam detection ──
         const timestamps = spamTracker.get(msg.author.id) ?? [];
         timestamps.push(now);
@@ -587,6 +743,7 @@ export function createBotClient(): Client | null {
               snippets,
             });
 
+            // Log to old staff spam channel (for manual action buttons)
             const spamCh = msg.guild.channels.cache.get(SPAM_LOG_CHANNEL_ID) as TextChannel | null;
             if (spamCh) {
               const member = msg.guild.members.cache.get(msg.author.id);
@@ -614,6 +771,16 @@ export function createBotClient(): Client | null {
 
               await spamCh.send({ embeds: [embed], components: [row] }).catch(() => {});
             }
+
+            // Also apply progressive punishment for spam
+            void applyProgressivePunishment(
+              msg.guild,
+              msg.author.id,
+              "Spamming messages",
+              MOD_LOG_CHANNEL_ID,
+              "💬 Spam Detected",
+              snippets.join(" | ").slice(0, 256),
+            );
           }
         }
       })();
@@ -2945,6 +3112,30 @@ async function handleButton(i: ButtonInteraction) {
       );
       await i.showModal(modal); return;
     }
+
+    case "panel_staff_app": {
+      const embed = new EmbedBuilder()
+        .setColor(0x5b8ef5)
+        .setTitle("Staff Applications Panel")
+        .setDescription("Send a standalone Staff Applications panel to any channel. Members click the button and complete the application via DM.");
+      await i.update({
+        embeds: [embed],
+        components: [
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId("sa_send_panel").setLabel("📋 Send Staff App Panel").setStyle(ButtonStyle.Primary),
+          ),
+          backRow("panel_back"),
+        ],
+      }); return;
+    }
+
+    case "sa_send_panel": {
+      if (!i.channel) return;
+      await i.deferUpdate();
+      await (i.channel as TextChannel).send({ embeds: [staffAppPanelEmbed()], components: staffAppPanelComponents() });
+      await i.editReply({ embeds: [okEmbed("✅ Staff Application panel sent to this channel.")], components: [backRow("panel_staff_app")] });
+      return;
+    }
   }
 
   // ── Spam alert buttons ──────────────────────────────────────────────────────
@@ -3889,8 +4080,9 @@ function panelEmbed() {
       { name: "Server Monitor", value: "Live server statistics", inline: true },
       { name: "Ticket Panel", value: "Manage the ticket system", inline: true },
       { name: "Farm Panel", value: "Manage farm listings", inline: true },
+      { name: "Skelly Panel", value: "Manage spawner prices", inline: true },
+      { name: "Staff Applications", value: "Send the staff app panel", inline: true },
     )
-    
     .setTimestamp();
 }
 
@@ -3900,7 +4092,40 @@ function panelRow() {
     new ButtonBuilder().setCustomId("panel_tickets").setLabel("Ticket Panel").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("panel_farms").setLabel("Farm Panel").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId("panel_skelly").setLabel("Skelly Panel").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel_staff_app").setLabel("Staff Apps").setStyle(ButtonStyle.Secondary),
   );
+}
+
+function staffAppPanelEmbed() {
+  return new EmbedBuilder()
+    .setColor(0x5b8ef5)
+    .setTitle("📋 Staff Applications — V3 Sanctuary")
+    .setDescription(
+      [
+        "Interested in joining the **V3 Sanctuary** staff team? We'd love to hear from you!",
+        "",
+        "**Requirements:**",
+        "• Must be **14 or older**",
+        "• Must have at least **25 vouches**",
+        "• Must follow all application rules",
+        "",
+        "**How it works:**",
+        "Click the button below. The bot will DM you a short set of questions — answer them one at a time.",
+        "You have **5 minutes per question** and up to **3 hours** total.",
+        "",
+        "⚠️ Troll applications will result in a **blacklist**.",
+        "❌ Do **not** ask about your application status — you will be contacted if accepted.",
+      ].join("\n"),
+    )
+    .setTimestamp();
+}
+
+function staffAppPanelComponents() {
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId("staff_apply").setLabel("📋 Apply for Staff").setStyle(ButtonStyle.Primary),
+    ),
+  ];
 }
 
 function ticketPanelEmbed() {
