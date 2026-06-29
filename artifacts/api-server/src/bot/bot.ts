@@ -117,7 +117,7 @@ function unmuteDmEmbed(reason: string, moderatorTag: string, guildName: string):
 function warnDmEmbed(reason: string, warnCount: number, guildName: string): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(0xed4245)
-    .setDescription(`**You have been warned**\n\n**Reason:** ${reason}\n**Warnings:** ${warnCount} / 5 — Reaching 5 results in an automatic ban.`)
+    .setDescription(`**You have been warned**\n\n**Reason:** ${reason}\n**Warnings:** ${warnCount} / 5. Reaching 5 results in an automatic ban.`)
     .setFooter({ text: `Sent from ${guildName}` });
 }
 
@@ -171,7 +171,7 @@ async function applyProgressivePunishment(
     const colors = [0xffa500, 0xf0a000, 0xe06000, 0xed4245, 0xed4245];
     const embed = new EmbedBuilder()
       .setColor(colors[Math.min(newCount - 1, colors.length - 1)] ?? 0xffa500)
-      .setAuthor({ name: `🚨 ${violationType}`, iconURL: guild.iconURL() ?? undefined })
+      .setAuthor({ name: violationType, iconURL: guild.iconURL() ?? undefined })
       .setThumbnail(user?.displayAvatarURL() ?? null)
       .addFields(
         { name: "User",    value: `<@${userId}> (\`${user?.username ?? userId}\`)`, inline: true },
@@ -305,7 +305,7 @@ function startPaymentPoll(channelId: string, guildId: string, userId: string, pr
             .setDescription(
               `**${priceStr}** has been received by \`___Vault___\`.\n\n` +
               `Base balance: \`$${fmtNum(baseBalance)}\` → Current: \`$${fmtNum(current)}\`\n\n` +
-              `Thank you! Your build will now begin. 🏗️`,
+              `Thank you! Your build will now begin.`,
             )
             .setTimestamp(),
         ],
@@ -615,10 +615,10 @@ export function createBotClient(): Client | null {
       if (!member || isStaff(member)) return;
 
       const typeLabel =
-        ruleTriggerType === AutoModerationRuleTriggerType.Keyword       ? "🤬 Bad Word Detected" :
-        ruleTriggerType === AutoModerationRuleTriggerType.KeywordPreset ? "🤬 Bad Word Detected" :
-        ruleTriggerType === AutoModerationRuleTriggerType.MentionSpam   ? "💬 Mention Spam"      :
-        "🚨 AutoMod Triggered";
+        ruleTriggerType === AutoModerationRuleTriggerType.Keyword       ? "Bad Word Detected" :
+        ruleTriggerType === AutoModerationRuleTriggerType.KeywordPreset ? "Bad Word Detected" :
+        ruleTriggerType === AutoModerationRuleTriggerType.MentionSpam   ? "Mention Spam"      :
+        "AutoMod Triggered";
 
       const reason = typeLabel.replace(/[^ -~]/g, "").trim() || "AutoMod rule violation";
 
@@ -707,14 +707,7 @@ export function createBotClient(): Client | null {
           if (newLevel > oldLevel && newLevel >= 1 && newLevel <= 100) {
             const lvlCh = msg.guild.channels.cache.get(LEVELUP_CHANNEL_ID) as TextChannel | null;
             if (lvlCh) {
-              const embed = new EmbedBuilder()
-                .setColor(0xf1c40f)
-                .setAuthor({ name: msg.author.username, iconURL: msg.author.displayAvatarURL() })
-                .setTitle("🎉 Level Up!")
-                .setDescription(`<@${msg.author.id}> just reached **Level ${newLevel}**!`)
-                .addFields({ name: "Total XP", value: `${newEntry.xp.toLocaleString()} XP`, inline: true })
-                .setTimestamp();
-              await lvlCh.send({ embeds: [embed] }).catch(() => {});
+              await lvlCh.send({ content: `<@${msg.author.id}> has reached level **${newLevel}**. GG!` }).catch(() => {});
             }
           }
         }
@@ -820,7 +813,7 @@ export function createBotClient(): Client | null {
               const joinedAt = member?.joinedAt;
               const embed = new EmbedBuilder()
                 .setColor(0xffa500)
-                .setAuthor({ name: "⚠️ Spam Detected", iconURL: msg.guild.iconURL() ?? undefined })
+                .setAuthor({ name: "Spam Detected", iconURL: msg.guild.iconURL() ?? undefined })
                 .setThumbnail(msg.author.displayAvatarURL())
                 .addFields(
                   { name: "User", value: `<@${msg.author.id}> (\`${msg.author.username}\`)`, inline: false },
@@ -848,7 +841,7 @@ export function createBotClient(): Client | null {
               msg.author.id,
               "Spamming messages",
               MOD_LOG_CHANNEL_ID,
-              "💬 Spam Detected",
+              "Spam Detected",
               snippets.join(" | ").slice(0, 256),
             );
           }
@@ -909,7 +902,7 @@ export function createBotClient(): Client | null {
           const reason = args.slice(2).join(" ").trim() || "No reason provided";
           const warn: WarnEntry = { userId: targetId, reason, moderatorId: msg.author.id, moderatorTag: msg.author.username, timestamp: new Date().toISOString() };
           const count = storage.addWarn(targetId, warn);
-          await msg.reply({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("⚠️ Warning Issued")
+          await msg.reply({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("Warning Issued")
             .addFields({ name: "User", value: `<@${targetId}>`, inline: true }, { name: "Moderator", value: `<@${msg.author.id}>`, inline: true }, { name: "Total", value: `**${count} / 5**`, inline: true }, { name: "Reason", value: reason })
             .setTimestamp()] }).catch(() => {});
           const target = await msg.client.users.fetch(targetId).catch(() => null);
@@ -917,7 +910,7 @@ export function createBotClient(): Client | null {
           if (count >= 5) {
             const m = guild?.members.cache.get(targetId);
             if (m?.bannable) await m.ban({ reason: "Auto-ban: 5 warnings reached" }).catch(() => {});
-            await msg.channel.send({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("🔨 Auto-Ban").setDescription(`<@${targetId}> auto-banned for reaching 5 warnings.`).setTimestamp()] }).catch(() => {});
+            await msg.channel.send({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("Auto-Ban").setDescription(`<@${targetId}> auto-banned for reaching 5 warnings.`).setTimestamp()] }).catch(() => {});
           }
           return;
         }
@@ -930,7 +923,7 @@ export function createBotClient(): Client | null {
           if (!m) { await msg.reply({ embeds: [errEmbed("Member not found.")] }).catch(() => {}); return; }
           if (!m.kickable) { await msg.reply({ embeds: [errEmbed("I cannot kick this member.")] }).catch(() => {}); return; }
           await m.kick(reason);
-          await msg.reply({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("👢 Kicked").addFields({ name: "User", value: `<@${targetId}>`, inline: true }, { name: "Reason", value: reason }).setTimestamp()] }).catch(() => {});
+          await msg.reply({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("Kicked").addFields({ name: "User", value: `<@${targetId}>`, inline: true }, { name: "Reason", value: reason }).setTimestamp()] }).catch(() => {});
           return;
         }
 
@@ -941,7 +934,7 @@ export function createBotClient(): Client | null {
           const m = guild?.members.cache.get(targetId);
           if (m && !m.bannable) { await msg.reply({ embeds: [errEmbed("I cannot ban this member.")] }).catch(() => {}); return; }
           await guild?.members.ban(targetId, { reason });
-          await msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("🔨 Banned").addFields({ name: "User", value: `<@${targetId}>`, inline: true }, { name: "Reason", value: reason }).setTimestamp()] }).catch(() => {});
+          await msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("Banned").addFields({ name: "User", value: `<@${targetId}>`, inline: true }, { name: "Reason", value: reason }).setTimestamp()] }).catch(() => {});
           return;
         }
 
@@ -1506,7 +1499,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     const count = storage.addWarn(target.id, warn);
     const warnEmbed = new EmbedBuilder()
       .setColor(WARNING_COLOR)
-      .setTitle("⚠️ Warning Issued")
+      .setTitle("Warning Issued")
       .addFields(
         { name: "User",            value: `<@${target.id}>`,   inline: true },
         { name: "Moderator",       value: `<@${user.id}>`,     inline: true },
@@ -1519,7 +1512,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     if (count >= 5) {
       const m = guild.members.cache.get(target.id);
       if (m?.bannable) await m.ban({ reason: `Auto-ban: 5 warnings reached` }).catch(() => {});
-      await (channel as TextChannel).send({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("🔨 Auto-Ban").setDescription(`<@${target.id}> has been automatically banned for accumulating 5 warnings.`).setTimestamp()] }).catch(() => {});
+      await (channel as TextChannel).send({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("Auto-Ban").setDescription(`<@${target.id}> has been automatically banned for accumulating 5 warnings.`).setTimestamp()] }).catch(() => {});
     }
     return;
   }
@@ -1557,7 +1550,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     if (!m.kickable) { await i.reply({ embeds: [errEmbed("I cannot kick this member.")], flags: 64 }); return; }
     await i.deferReply();
     await m.kick(reason);
-    await i.editReply({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("👢 Member Kicked").addFields({ name: "User", value: `<@${target.id}>`, inline: true }, { name: "Moderator", value: `<@${user.id}>`, inline: true }, { name: "Reason", value: reason }).setTimestamp()] });
+    await i.editReply({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("Member Kicked").addFields({ name: "User", value: `<@${target.id}>`, inline: true }, { name: "Moderator", value: `<@${user.id}>`, inline: true }, { name: "Reason", value: reason }).setTimestamp()] });
     return;
   }
 
@@ -1572,7 +1565,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     if (m && !m.bannable) { await i.reply({ embeds: [errEmbed("I cannot ban this member.")], flags: 64 }); return; }
     await i.deferReply();
     await guild.members.ban(target.id, { reason });
-    await i.editReply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("🔨 Member Banned").addFields({ name: "User", value: `<@${target.id}>`, inline: true }, { name: "Moderator", value: `<@${user.id}>`, inline: true }, { name: "Reason", value: reason }).setTimestamp()] });
+    await i.editReply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setTitle("Member Banned").addFields({ name: "User", value: `<@${target.id}>`, inline: true }, { name: "Moderator", value: `<@${user.id}>`, inline: true }, { name: "Reason", value: reason }).setTimestamp()] });
     return;
   }
 
@@ -1601,7 +1594,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     await i.editReply({
       embeds: [new EmbedBuilder()
         .setColor(0xed4245)
-        .setTitle("🔇 Member Muted")
+        .setTitle("Member Muted")
         .addFields(
           { name: "User",      value: `<@${target.id}>`,      inline: true },
           { name: "Moderator", value: `<@${user.id}>`,         inline: true },
@@ -1636,7 +1629,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     await i.editReply({
       embeds: [new EmbedBuilder()
         .setColor(0x57f287)
-        .setTitle("🔊 Member Unmuted")
+        .setTitle("Member Unmuted")
         .addFields(
           { name: "User",      value: `<@${target.id}>`, inline: true },
           { name: "Moderator", value: `<@${user.id}>`,   inline: true },
@@ -2649,7 +2642,7 @@ async function handleButton(i: ButtonInteraction) {
       const dm = await applicant.createDM();
       await dm.send({
         content:
-          `🎉 **Congratulations — Your Application Has Been Accepted!**\n\n` +
+          `**Congratulations — Your Application Has Been Accepted!**\n\n` +
           `We're thrilled to welcome you to the **V3 Sanctuary** staff team!\n\n` +
           `A member of leadership will be reaching out to you shortly with next steps and everything you need to get started. ` +
           `In the meantime, please make sure you're active in the server and ready to begin.\n\n` +
@@ -2878,7 +2871,7 @@ async function handleButton(i: ButtonInteraction) {
     const channelId = customId.slice("build_reject_price_".length);
     pendingPriceConfirms.delete(channelId);
     await i.update({
-      embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`❌ <@${user.id}> rejected the proposed price. Builder, please set a new price using the **💰 Set Price** button.`)],
+      embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`<@${user.id}> rejected the proposed price. Builder, please set a new price using the **Set Price** button.`)],
       components: [],
     });
     return;
@@ -3372,17 +3365,17 @@ async function handleButton(i: ButtonInteraction) {
       const count = storage.addWarn(alert.userId, warn);
       pendingSpamAlerts.delete(alertId);
       await i.update({
-        embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`⚠️ <@${alert.userId}> warned for spam. **(${count}/5 warnings)**`)],
+        embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`<@${alert.userId}> warned for spam. **(${count}/5 warnings)**`)],
         components: [],
       });
-      target.user.send({ embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setTitle("⚠️ You have been warned").setDescription("**Reason:** Spamming\n**Warnings:** " + count + " / 5")] }).catch(() => {});
+      target.user.send({ embeds: [warnDmEmbed("Spamming", count, guild?.name ?? "V3 Sanctuary")] }).catch(() => {});
       if (count >= 5 && target.bannable) await target.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
     } else if (action === "kick") {
       if (!target.kickable) { await i.reply({ embeds: [errEmbed("I cannot kick this member.")], flags: 64 }); return; }
       await target.kick("Spam detected by AutoMod").catch(() => {});
       pendingSpamAlerts.delete(alertId);
       await i.update({
-        embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`👢 <@${alert.userId}> kicked for spam.`)],
+        embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`<@${alert.userId}> kicked for spam.`)],
         components: [],
       });
     } else if (action === "ban") {
@@ -3390,14 +3383,14 @@ async function handleButton(i: ButtonInteraction) {
       await target.ban({ reason: "Spam detected by AutoMod" }).catch(() => {});
       pendingSpamAlerts.delete(alertId);
       await i.update({
-        embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`🔨 <@${alert.userId}> banned for spam.`)],
+        embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`<@${alert.userId}> banned for spam.`)],
         components: [],
       });
     } else if (action === "timeout") {
       await target.timeout(10 * 60 * 1000, "Spam detected by AutoMod").catch(() => {});
       pendingSpamAlerts.delete(alertId);
       await i.update({
-        embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`⏱️ <@${alert.userId}> timed out for 10 minutes for spam.`)],
+        embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`<@${alert.userId}> timed out for 10 minutes for spam.`)],
         components: [],
       });
     }
@@ -3888,7 +3881,7 @@ async function handleModal(i: ModalSubmitInteraction) {
       embeds: [
         new EmbedBuilder()
           .setColor(GOLD_COLOR)
-          .setTitle("💰 Price Proposal")
+          .setTitle("Price Proposal")
           .setDescription(
             `<@${user.id}> has set the price to **${priceStr}**.\n\n` +
             `<@${ticket.userId}>, please confirm or reject this price below.`,
@@ -4448,7 +4441,7 @@ async function runStaffApplication(user: User, guild: Guild) {
         });
       } catch {
         await dm.send({
-          content: "⏱️ Application timed out. Please start a new application from the tickets channel.",
+          content: "Application timed out. Please start a new application from the tickets channel.",
         });
         activeStaffApplications.delete(user.id);
         return;
