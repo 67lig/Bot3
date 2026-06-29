@@ -656,7 +656,7 @@ export function createBotClient(): Client | null {
     const ch = member.guild.channels.cache.get(welcomeChannelId) as TextChannel | null;
     if (!ch) return;
     const embed = new EmbedBuilder()
-      .setColor(BOT_COLOR)
+      .setColor(SUCCESS_COLOR)
       .setAuthor({ name: member.guild.name, iconURL: member.guild.iconURL() ?? undefined })
       .setTitle("Welcome To V3 Sanctuary")
       .setDescription(
@@ -1492,7 +1492,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       await i.reply({ embeds: [errEmbed("You are not authorized.")], flags: 64 });
       return;
     }
-    await i.reply({ embeds: [panelEmbed()], components: [panelRow()], flags: 64 });
+    await i.reply({ embeds: [panelEmbed()], components: panelRows(), flags: 64 });
     return;
   }
 
@@ -2778,7 +2778,27 @@ async function handleButton(i: ButtonInteraction) {
 
   switch (customId) {
     case "panel_back":
-      await i.update({ embeds: [panelEmbed()], components: [panelRow()] }); return;
+      await i.update({ embeds: [panelEmbed()], components: panelRows() }); return;
+
+    case "panel_rules": {
+      const ch = i.channel as TextChannel;
+      await i.deferUpdate();
+      const WHITE = 0xffffff;
+      await ch.send({ embeds: [
+        new EmbedBuilder().setColor(WHITE).setTitle("V4 Sanctuary Rules").addFields({ name: "Section 1 — The Preamble", value: ["────────────────────────────", "By joining (and participating in this server), you agree to follow all established rules, including any updates or changes made in the future.", "", "Please keep your direct messages enabled. If disciplinary action is taken against you, staff will contact you with the reason for the punishment.", "", "The rules listed here are not exhaustive. Staff retain full authority to address behavior that violates the spirit of the community, even if it is not specifically mentioned."].join("\n") }),
+      ] }).catch(() => {});
+      await ch.send({ embeds: [
+        new EmbedBuilder().setColor(WHITE).addFields({ name: "Section 2 — Terms and Services", value: ["────────────────────────────", "You must listen to [Discord's Terms of Service](https://discord.com/terms) at all times.", "", "By being part of this server, you agree to follow Discord's Community Guidelines to help maintain a safe and respectful environment.", "", "**To join the official V4 server, you must be at least 13 years old.**", "", "Do not discuss, promote, or admit to violating Discord's Terms of Service (e.g., scamming, distributing malicious content, evading bans).", "", "Any content that violates Discord's Terms of Service or Community Guidelines will be removed and may result in disciplinary action, including a ban. This includes, but is not limited to: harassment, scams, malicious links, or sharing inappropriate content."].join("\n") }),
+      ] }).catch(() => {});
+      await ch.send({ embeds: [
+        new EmbedBuilder().setColor(WHITE).addFields({ name: "Section 3 — Guidelines", value: ["────────────────────────────", "**3.1 No Direct or Indirect Threats** – Any threats involving DDoS, doxxing, violence, hacking, or harm toward another member are strictly prohibited. Even joking about these topics can result in action.", "", "**3.2 No Advertisements** – Promotion of other servers, communities, products, streams, or services is not allowed. Content may only be shared in approved channels if it is relevant and adds value.", "", "**3.3 Be Respectful at All Times** – Harassment, bullying, discrimination, or targeting other members will not be tolerated. Keep interactions mature and respectful.", "", "**3.4 No Pornographic or NSFW Content** – Explicit, adult, or otherwise inappropriate material is not permitted in any channel.", "", "**3.5 No Spamming or Flooding** – Avoid sending repeated messages, excessive emojis, all caps, or disrupting conversations with unnecessary content.", "", "**3.6 Appropriate Usernames & Profile Pictures** – Names and profile pictures must remain appropriate. Staff may require changes if something is considered offensive.", "", "**3.7 No Raiding or Raid Discussions** – Organizing, participating in, or even suggesting raids against this or other communities is forbidden.", "", "**3.8 Use Appropriate Language** – Keep profanity limited and never direct offensive, hateful, or discriminatory language toward others."].join("\n") }),
+      ] }).catch(() => {});
+      await ch.send({ embeds: [
+        new EmbedBuilder().setColor(WHITE).addFields({ name: "Section 4 — Reports", value: ["────────────────────────────", "All violations of these guidelines must be reported.", "", "**How to Report:**", "• Create a ticket in <#1450662193266692288>", "• Provide a detailed explanation of the incident.", "• Include clear evidence (screenshots, message links, etc.).", "• Provide the User ID(s) of the individual(s) involved — enable Developer Mode to obtain this."].join("\n") }).setFooter({ text: "Last Updated: June 2025" }),
+      ] }).catch(() => {});
+      await i.editReply({ embeds: [panelEmbed()], components: panelRows() }).catch(() => {});
+      return;
+    }
 
     case "panel_server": {
       if (!guild) return;
@@ -3939,18 +3959,24 @@ function panelEmbed() {
       { name: "Farm Panel", value: "Manage farm listings", inline: true },
       { name: "Skelly Panel", value: "Manage spawner prices", inline: true },
       { name: "Staff Applications", value: "Send the staff app panel", inline: true },
+      { name: "Rules", value: "Send the server rules to this channel", inline: true },
     )
     .setTimestamp();
 }
 
-function panelRow() {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("panel_server").setLabel("Server Monitor").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("panel_tickets").setLabel("Ticket Panel").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("panel_farms").setLabel("Farm Panel").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("panel_skelly").setLabel("Skelly Panel").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("panel_staff_app").setLabel("Staff Apps").setStyle(ButtonStyle.Secondary),
-  );
+function panelRows() {
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId("panel_server").setLabel("Server Monitor").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel_tickets").setLabel("Ticket Panel").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("panel_farms").setLabel("Farm Panel").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("panel_skelly").setLabel("Skelly Panel").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("panel_staff_app").setLabel("Staff Apps").setStyle(ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId("panel_rules").setLabel("Send Rules").setStyle(ButtonStyle.Danger),
+    ),
+  ];
 }
 
 function staffAppPanelEmbed() {
