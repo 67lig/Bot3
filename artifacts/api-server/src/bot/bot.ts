@@ -471,16 +471,15 @@ export function createBotClient(): Client | null {
   const stickyBusy = new Set<string>();
 
   // ─── Welcome Channels ────────────────────────────────────────────────────
+  const WELCOME_CHANNEL_DEFAULT = "1450662193266692282";
   const WELCOME_RULES_CH   = "1450662193266692286";
   const WELCOME_GIVEAWAY_1 = "1450662193266692288";
   const WELCOME_GIVEAWAY_2 = "1450662193266692290";
   const WELCOME_GIVEAWAY_3 = "1496946833757311082";
 
   client.on("guildMemberAdd", async (member) => {
-    const welcomeChannelId = storage.getWelcomeChannelId();
-    const ch = (welcomeChannelId
-      ? member.guild.channels.cache.get(welcomeChannelId)
-      : member.guild.systemChannel) as TextChannel | null;
+    const welcomeChannelId = storage.getWelcomeChannelId() || WELCOME_CHANNEL_DEFAULT;
+    const ch = member.guild.channels.cache.get(welcomeChannelId) as TextChannel | null;
     if (!ch) return;
     const embed = new EmbedBuilder()
       .setColor(BOT_COLOR)
@@ -583,6 +582,79 @@ export function createBotClient(): Client | null {
           return;
         }
 
+        if (cmd === "rules") {
+          if (!isOwnerOrCoOwner(member)) return;
+          const rulesEmbed = new EmbedBuilder()
+            .setColor(BOT_COLOR)
+            .setTitle("V4 Sanctuary Rules")
+            .addFields(
+              {
+                name: "Section 1 — The Preamble",
+                value: [
+                  "────────────────────────────",
+                  "By joining (and participating in this server), you agree to follow all established rules, including any updates or changes made in the future.",
+                  "",
+                  "Please keep your direct messages enabled. If disciplinary action is taken against you, staff will contact you with the reason for the punishment.",
+                  "",
+                  "The rules listed here are not exhaustive. Staff retain full authority to address behavior that violates the spirit of the community, even if it is not specifically mentioned.",
+                ].join("\n"),
+              },
+              {
+                name: "Section 2 — Terms and Services",
+                value: [
+                  "────────────────────────────",
+                  "You must listen to [Discord's Terms of Service](https://discord.com/terms) at all times.",
+                  "",
+                  "By being part of this server, you agree to follow Discord's Community Guidelines to help maintain a safe and respectful environment.",
+                  "",
+                  "**To join the official V4 server, you must be at least 13 years old.**",
+                  "",
+                  "Do not discuss, promote, or admit to violating Discord's Terms of Service (e.g., scamming, distributing malicious content, evading bans).",
+                  "",
+                  "Any content that violates Discord's Terms of Service or Community Guidelines will be removed and may result in disciplinary action, including a ban. This includes, but is not limited to: harassment, scams, malicious links, or sharing inappropriate content.",
+                ].join("\n"),
+              },
+              {
+                name: "Section 3 — Guidelines",
+                value: [
+                  "────────────────────────────",
+                  "**3.1 No Direct or Indirect Threats** – Any threats involving DDoS, doxxing, violence, hacking, or harm toward another member are strictly prohibited. Even joking about these topics can result in action.",
+                  "",
+                  "**3.2 No Advertisements** – Promotion of other servers, communities, products, streams, or services is not allowed. Content may only be shared in approved channels if it is relevant and adds value.",
+                  "",
+                  "**3.3 Be Respectful at All Times** – Harassment, bullying, discrimination, or targeting other members will not be tolerated. Keep interactions mature and respectful.",
+                  "",
+                  "**3.4 No Pornographic or NSFW Content** – Explicit, adult, or otherwise inappropriate material is not permitted in any channel.",
+                  "",
+                  "**3.5 No Spamming or Flooding** – Avoid sending repeated messages, excessive emojis, all caps, or disrupting conversations with unnecessary content.",
+                  "",
+                  "**3.6 Appropriate Usernames & Profile Pictures** – Names and profile pictures must remain appropriate. Staff may require changes if something is considered offensive.",
+                  "",
+                  "**3.7 No Raiding or Raid Discussions** – Organizing, participating in, or even suggesting raids against this or other communities is forbidden.",
+                  "",
+                  "**3.8 Use Appropriate Language** – Keep profanity limited and never direct offensive, hateful, or discriminatory language toward others.",
+                ].join("\n"),
+              },
+              {
+                name: "Section 4 — Reports",
+                value: [
+                  "────────────────────────────",
+                  "All violations of these guidelines must be reported.",
+                  "**How to Report:**",
+                  "• Create a ticket in <#1450662193266692288>",
+                  "• Provide a detailed explanation of the incident.",
+                  "• Include clear evidence (screenshots, message links, etc.).",
+                  "• Provide the User ID(s) of the individual(s) involved — enable Developer Mode to obtain this.",
+                ].join("\n"),
+              },
+            )
+            .setFooter({ text: "Last Updated: June 2025" })
+            .setTimestamp();
+          await (msg.channel as TextChannel).send({ embeds: [rulesEmbed] }).catch(() => {});
+          await msg.delete().catch(() => {});
+          return;
+        }
+
         if (cmd === "setwelcome") {
           if (!isOwnerOrCoOwner(member)) return;
           const chId = msg.mentions.channels.first()?.id;
@@ -605,7 +677,9 @@ export function createBotClient(): Client | null {
             `**Correct formats:**\n` +
             `\`vouch @member\`\n` +
             `\`vouch @member reason\`\n` +
+            `\`scam vouch @member\`\n` +
             `\`scam vouch @member reason\`\n` +
+            `\`scamvouch @member\`\n` +
             `\`scamvouch @member reason\``,
           )
           .catch(() => {});
@@ -754,93 +828,6 @@ async function registerCommands(client: Client) {
       .addStringOption((o) =>
         o.setName("amount").setDescription("Total price, e.g. 1m, 500k, 1.5b, or 250000").setRequired(false),
       ),
-    new SlashCommandBuilder()
-      .setName("addspawner")
-      .setDescription("Set the in-stock amount for a spawner type (owner/co-owner only)")
-      .addStringOption((o) =>
-        o
-          .setName("spawner")
-          .setDescription("Spawner type")
-          .setRequired(true)
-          .addChoices(
-            { name: "Skeleton",   value: "skeleton"  },
-            { name: "Iron Golem", value: "irongolem" },
-            { name: "Blaze",      value: "blaze"     },
-            { name: "Pig",        value: "pig"       },
-            { name: "Cow",        value: "cow"       },
-            { name: "Spider",     value: "spider"    },
-            { name: "Piglin",     value: "piglin"    },
-            { name: "Creeper",    value: "creeper"   },
-          ),
-      )
-      .addIntegerOption((o) =>
-        o.setName("amount").setDescription("Amount currently in stock").setRequired(true).setMinValue(0),
-      ),
-    new SlashCommandBuilder()
-      .setName("changeprice")
-      .setDescription("Change the buy price of a spawner type (owner/co-owner/manager only)")
-      .addStringOption((o) =>
-        o
-          .setName("spawner")
-          .setDescription("Spawner type")
-          .setRequired(true)
-          .addChoices(
-            { name: "Skeleton",   value: "skeleton"  },
-            { name: "Iron Golem", value: "irongolem" },
-            { name: "Blaze",      value: "blaze"     },
-            { name: "Pig",        value: "pig"       },
-            { name: "Cow",        value: "cow"       },
-            { name: "Spider",     value: "spider"    },
-            { name: "Piglin",     value: "piglin"    },
-            { name: "Creeper",    value: "creeper"   },
-          ),
-      )
-      .addStringOption((o) =>
-        o.setName("price").setDescription("New buy price, e.g. 3m, 2.5m, 500k").setRequired(true),
-      ),
-    new SlashCommandBuilder()
-      .setName("spawner")
-      .setDescription("Manage spawner stock (owner/co-owner/manager only)")
-      .addSubcommand((sub) =>
-        sub
-          .setName("add")
-          .setDescription("Add to a spawner's in-stock amount")
-          .addStringOption((o) =>
-            o.setName("spawner").setDescription("Spawner type").setRequired(true).addChoices(
-              { name: "Skeleton",   value: "skeleton"  },
-              { name: "Iron Golem", value: "irongolem" },
-              { name: "Blaze",      value: "blaze"     },
-              { name: "Pig",        value: "pig"       },
-              { name: "Cow",        value: "cow"       },
-              { name: "Spider",     value: "spider"    },
-              { name: "Piglin",     value: "piglin"    },
-              { name: "Creeper",    value: "creeper"   },
-            ),
-          )
-          .addIntegerOption((o) =>
-            o.setName("amount").setDescription("Amount to add").setRequired(true).setMinValue(1),
-          ),
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName("remove")
-          .setDescription("Remove from a spawner's in-stock amount (e.g. after a sale)")
-          .addStringOption((o) =>
-            o.setName("spawner").setDescription("Spawner type").setRequired(true).addChoices(
-              { name: "Skeleton",   value: "skeleton"  },
-              { name: "Iron Golem", value: "irongolem" },
-              { name: "Blaze",      value: "blaze"     },
-              { name: "Pig",        value: "pig"       },
-              { name: "Cow",        value: "cow"       },
-              { name: "Spider",     value: "spider"    },
-              { name: "Piglin",     value: "piglin"    },
-              { name: "Creeper",    value: "creeper"   },
-            ),
-          )
-          .addIntegerOption((o) =>
-            o.setName("amount").setDescription("Amount to remove").setRequired(true).setMinValue(1),
-          ),
-      ),
   ].map((c) => c.toJSON());
 
   try {
@@ -906,12 +893,9 @@ async function handleInteraction(i: Interaction) {
   if (i.isModalSubmit()) return handleModal(i);
 }
 
-const SKELLY_MANAGER_ROLE_ID = "1520650191139504235";
-
 function isOwner(id: string) { return id === OWNER_ID; }
 function isCoOwner(m: GuildMember) { return m.roles.cache.has(CO_OWNER_ROLE_ID) && !isOwner(m.id); }
 function isOwnerOrCoOwner(m: GuildMember) { return isOwner(m.id) || isCoOwner(m); }
-function isSpawnerManager(m: GuildMember) { return isOwnerOrCoOwner(m) || m.roles.cache.has(SKELLY_MANAGER_ROLE_ID); }
 function isStaff(m: GuildMember) {
   return isOwnerOrCoOwner(m)
     || m.permissions.has(PermissionFlagsBits.ManageChannels)
@@ -1433,76 +1417,6 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     return;
   }
 
-  if (commandName === "addspawner") {
-    const member = i.member as GuildMember;
-    if (!isSpawnerManager(member)) {
-      await i.reply({ embeds: [errEmbed("You don't have permission to update spawner stock.")], flags: 64 });
-      return;
-    }
-    const spawnerKey = i.options.getString("spawner", true);
-    const amount     = i.options.getInteger("amount", true);
-    storage.setSpawnerStock(spawnerKey, amount);
-    const entry = SPAWNER_KEYS.find((s) => s.key === spawnerKey);
-    const label = entry ? entry.label : spawnerKey;
-    await i.reply({
-      embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** — Amount in stock: **${amount}**`)],
-      flags: 64,
-    });
-    await updateSkellyPanel(_client!, guild ?? undefined);
-    return;
-  }
-
-  if (commandName === "spawner") {
-    const member = i.member as GuildMember;
-    if (!isSpawnerManager(member)) {
-      await i.reply({ embeds: [errEmbed("You don't have permission to manage spawner stock.")], flags: 64 });
-      return;
-    }
-    const sub        = i.options.getSubcommand();
-    const spawnerKey = i.options.getString("spawner", true);
-    const amount     = i.options.getInteger("amount", true);
-    const entry      = SPAWNER_KEYS.find((s) => s.key === spawnerKey);
-    const label      = entry ? entry.label : spawnerKey;
-    const current    = storage.getSpawnerStock(spawnerKey);
-
-    if (sub === "add") {
-      const newTotal = current + amount;
-      storage.setSpawnerStock(spawnerKey, newTotal);
-      await i.reply({
-        embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** — Added **${amount}**. Amount in stock: **${newTotal}**`)],
-        flags: 64,
-      });
-    } else if (sub === "remove") {
-      const newTotal = Math.max(0, current - amount);
-      storage.setSpawnerStock(spawnerKey, newTotal);
-      await i.reply({
-        embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** — Removed **${amount}**. Amount in stock: **${newTotal}**`)],
-        flags: 64,
-      });
-    }
-    await updateSkellyPanel(_client!, guild ?? undefined);
-    return;
-  }
-
-  if (commandName === "changeprice") {
-    const member = i.member as GuildMember;
-    if (!isSpawnerManager(member)) {
-      await i.reply({ embeds: [errEmbed("You don't have permission to change spawner prices.")], flags: 64 });
-      return;
-    }
-    const spawnerKey = i.options.getString("spawner", true);
-    const newPrice   = i.options.getString("price", true).trim();
-    storage.setSpawnerBuyPrice(spawnerKey, newPrice);
-    const entry = SPAWNER_KEYS.find((s) => s.key === spawnerKey);
-    const label = entry ? entry.label : spawnerKey;
-    await i.reply({
-      embeds: [new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **${label}** buy price updated to **${newPrice}**`)],
-      flags: 64,
-    });
-    await updateSkellyPanel(_client!, guild ?? undefined);
-    return;
-  }
-
   if (commandName === "close") {
     if (!channel || !guild) return;
     const ticket = storage.getTicket(channel.id);
@@ -1916,7 +1830,7 @@ async function handleButton(i: ButtonInteraction) {
         return;
       }
       await i.reply({
-        embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${skellyPriceText()}\n\nChoose an option below:`)],
+        embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${SKELLY_PRICE_TEXT}\n\nChoose an option below:`)],
         components: [
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId("skelly_buy").setLabel("Buy Spawners").setStyle(ButtonStyle.Success),
@@ -2537,8 +2451,7 @@ async function handleButton(i: ButtonInteraction) {
     case "sk_send_panel": {
       if (!i.channel) return;
       await i.deferUpdate();
-      const panelMsg = await (i.channel as TextChannel).send({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
-      storage.setSkellyPanelRef(i.channel.id, panelMsg.id);
+      await (i.channel as TextChannel).send({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
       await i.editReply({ embeds: [okEmbed("✅ Skelly ticket panel sent to this channel.")], components: [backRow("panel_skelly")] });
       return;
     }
@@ -2606,7 +2519,7 @@ async function handleStringSelect(i: StringSelectMenuInteraction) {
         return;
       }
       await i.reply({
-        embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${skellyPriceText()}\n\nChoose an option below:`)],
+        embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${SKELLY_PRICE_TEXT}\n\nChoose an option below:`)],
         components: [
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId("skelly_buy").setLabel("Buy Spawners").setStyle(ButtonStyle.Success),
@@ -2632,7 +2545,7 @@ async function handleStringSelect(i: StringSelectMenuInteraction) {
       return;
     }
     await i.reply({
-      embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${skellyPriceText()}\n\nChoose an option below:`)],
+      embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Tickets").setDescription(`${SKELLY_PRICE_TEXT}\n\nChoose an option below:`)],
       components: [
         new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder().setCustomId("skelly_buy").setLabel("Buy Spawners").setStyle(ButtonStyle.Success),
@@ -2865,10 +2778,10 @@ async function handleModal(i: ModalSubmitInteraction) {
     }
     if (existingId) storage.removeTicket(existingId);
     await i.deferReply({ flags: 64 });
-    let discordCat = guild.channels.cache.find((c) => c.type === ChannelType.GuildCategory && c.name === FARM_CATEGORY.discordCategoryName) as CategoryChannel | undefined;
+    let discordCat = guild.channels.cache.find((c) => c.type === ChannelType.GuildCategory && c.name === "Digging Tickets") as CategoryChannel | undefined;
     if (!discordCat) {
       discordCat = await guild.channels.create({
-        name: FARM_CATEGORY.discordCategoryName,
+        name: "Digging Tickets",
         type: ChannelType.GuildCategory,
         permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }],
       });
@@ -3171,7 +3084,7 @@ async function handleModal(i: ModalSubmitInteraction) {
     const welcomeEmbed = new EmbedBuilder()
       .setColor(SKELLY_CATEGORY.color)
       .setTitle(`${isBuying ? "Buying" : "Selling"} Spawners: ${ticketTag(ticketNum)}`)
-      .setDescription(`${skellyPriceText()}\n\nSee <#1518633695404101773> for more info - [click here](${SKELLY_PRICE_CHANNEL})`)
+      .setDescription(`${SKELLY_PRICE_TEXT}\n\nSee <#1518633695404101773> for more info - [click here](${SKELLY_PRICE_CHANNEL})`)
       .addFields(...welcomeFields)
       .setTimestamp();
 
@@ -3478,83 +3391,28 @@ function ticketPanelComponents() {
 
 const SKELLY_PRICE_CHANNEL = "https://discord.com/channels/1450662191890956322/1518633695404101773";
 
-const SPAWNER_KEYS = [
-  { key: "skeleton",  label: "Skeleton Spawners",   defaultBuyPrice: "3.2m" },
-  { key: "irongolem", label: "Iron Golem Spawners",  defaultBuyPrice: "5.5m" },
-  { key: "blaze",     label: "Blaze Spawners",       defaultBuyPrice: "2m"   },
-  { key: "pig",       label: "Pig Spawners",         defaultBuyPrice: "2m"   },
-  { key: "cow",       label: "Cow Spawners",         defaultBuyPrice: "2m"   },
-  { key: "spider",    label: "Spider Spawners",      defaultBuyPrice: "4m"   },
-  { key: "piglin",    label: "Piglin Spawners",      defaultBuyPrice: "5m"   },
-  { key: "creeper",   label: "Creeper Spawners",     defaultBuyPrice: "5m"   },
-] as const;
-
-function skellyPriceText(): string {
-  const stock  = storage.getAllSpawnerStock();
-  const prices = storage.getAllSpawnerBuyPrices();
-  const buyLines = SPAWNER_KEYS.map(({ key, label, defaultBuyPrice }) => {
-    const price = prices[key] ?? defaultBuyPrice;
-    const amt   = stock[key] ?? 0;
-    return `• ${label} — ${price} each | Amount: ${amt}`;
-  });
-  return [
-    "**Buying:**",
-    ...buyLines,
-    "",
-    "**Selling:**",
-    "• Skeleton Spawners — 3.9m each",
-    "• Creeper Spawners — 8m each",
-    "• Iron Golem Spawners — 9m each",
-    "",
-    "**Notes:**",
-    "Our prices are possibly negotiable",
-    "5x5 minimum",
-    "16 spawner minimum",
-  ].join("\n");
-}
-
-async function updateSkellyPanel(client: Client, guild?: Guild): Promise<void> {
-  // 1. Try stored ref first (fast path)
-  const ref = storage.getSkellyPanelRef();
-  if (ref) {
-    try {
-      const ch = await client.channels.fetch(ref.channelId);
-      if (ch && ch.type === ChannelType.GuildText) {
-        const msg = await (ch as TextChannel).messages.fetch(ref.messageId);
-        await msg.edit({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
-        return;
-      }
-    } catch {
-      // Ref is stale — fall through to scan
-    }
-  }
-
-  // 2. Scan all guild text channels for the bot's "Spawner Prices" panel message
-  const g = guild ?? (client.guilds.cache.first());
-  if (!g) return;
-  for (const ch of g.channels.cache.values()) {
-    if (ch.type !== ChannelType.GuildText) continue;
-    try {
-      const msgs = await (ch as TextChannel).messages.fetch({ limit: 50 });
-      for (const msg of msgs.values()) {
-        if (msg.author.id !== client.user!.id) continue;
-        if (msg.embeds[0]?.title === "Spawner Prices") {
-          await msg.edit({ embeds: [skellyTicketPanelEmbed()], components: skellyTicketComponents() });
-          storage.setSkellyPanelRef(ch.id, msg.id);
-          return;
-        }
-      }
-    } catch {
-      continue;
-    }
-  }
-}
+const SKELLY_PRICE_TEXT = [
+  "**Buying:**",
+  "Skeleton: 3.3m each",
+  "Creeper: 3.3m each",
+  "Iron Golem: 5.5m each",
+  "",
+  "**Selling:**",
+  "Skeleton: 3.9m each",
+  "Creeper: 8m each",
+  "Iron Golem: 9m each",
+  "",
+  "**Notes:**",
+  "Our prices are possibly negotiable",
+  "5x5 minimum",
+  "16 spawner minimum",
+].join("\n");
 
 function skellyTicketPanelEmbed() {
   return new EmbedBuilder()
     .setColor(SKELLY_CATEGORY.color)
     .setTitle("Spawner Prices")
-    .setDescription(`${skellyPriceText()}\n\nSee <#1518633695404101773> for more details.\nOpen a ticket below to buy or sell.`)
+    .setDescription(`${SKELLY_PRICE_TEXT}\n\nSee <#1518633695404101773> for more details.\nOpen a ticket below to buy or sell.`)
     .setTimestamp();
 }
 

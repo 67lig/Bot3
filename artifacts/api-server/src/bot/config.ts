@@ -74,7 +74,7 @@ export const REGULAR_CATEGORIES: TicketCategory[] = [
       "If you want to post your schematics or become a builder please create a ticket here.",
     color: 0xe67e22,
     channelPrefix: "builder",
-    discordCategoryName: "Support Tickets",
+    discordCategoryName: "Builder Applications",
   },
 ];
 
