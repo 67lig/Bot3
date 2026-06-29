@@ -2479,6 +2479,16 @@ async function handleButton(i: ButtonInteraction) {
     return;
   }
 
+  if (customId === "sa_builder_apply") {
+    await handleTicketCreate(i, "builder-application", false);
+    return;
+  }
+
+  if (customId === "sa_schematic_apply") {
+    await handleTicketCreate(i, "schematic-application", false);
+    return;
+  }
+
   if (customId.startsWith("staff_accept_")) {
     const applicantId = customId.slice("staff_accept_".length);
     await i.deferUpdate();
@@ -4099,22 +4109,18 @@ function panelRow() {
 function staffAppPanelEmbed() {
   return new EmbedBuilder()
     .setColor(0x5b8ef5)
-    .setTitle("📋 Staff Applications — V3 Sanctuary")
+    .setTitle("Applications")
     .setDescription(
       [
-        "Interested in joining the **V3 Sanctuary** staff team? We'd love to hear from you!",
+        "**Requirements**",
+        "• Must be **14+**.",
+        "• Must have **25 vouches**.",
         "",
-        "**Requirements:**",
-        "• Must be **14 or older**",
-        "• Must have at least **25 vouches**",
-        "• Must follow all application rules",
+        "**Rules**",
+        "• Do not ask about your application after submitting.",
+        "• Troll applications can get you blacklisted.",
         "",
-        "**How it works:**",
-        "Click the button below. The bot will DM you a short set of questions — answer them one at a time.",
-        "You have **5 minutes per question** and up to **3 hours** total.",
-        "",
-        "⚠️ Troll applications will result in a **blacklist**.",
-        "❌ Do **not** ask about your application status — you will be contacted if accepted.",
+        "Choose the application type below.",
       ].join("\n"),
     )
     .setTimestamp();
@@ -4123,7 +4129,9 @@ function staffAppPanelEmbed() {
 function staffAppPanelComponents() {
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("staff_apply").setLabel("📋 Apply for Staff").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("staff_apply").setLabel("Staff Application 📋").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("sa_builder_apply").setLabel("Builder Application 🏗️").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("sa_schematic_apply").setLabel("Schematic Application 📐").setStyle(ButtonStyle.Secondary),
     ),
   ];
 }

@@ -72,12 +72,21 @@ export const REGULAR_CATEGORIES: TicketCategory[] = [
   },
   {
     id: "builder-application",
-    label: "Builder Application / Schematic Poster Application",
+    label: "Builder Application",
     description:
-      "If you want to post your schematics or become a builder please create a ticket here.",
+      "Want to become a builder on V3 Sanctuary? Open this ticket and a staff member will review your application. Please be ready to share your builds or portfolio.",
     color: 0xe67e22,
-    channelPrefix: "builder",
-    discordCategoryName: "Builder Applications",
+    channelPrefix: "builder-app",
+    discordCategoryName: "Support Tickets",
+  },
+  {
+    id: "schematic-application",
+    label: "Schematic Application",
+    description:
+      "Want to become a Schematic Poster on V3 Sanctuary? Open this ticket and a staff member will review your submission. Please be ready to share your schematics.",
+    color: 0x9b59b6,
+    channelPrefix: "schematic-app",
+    discordCategoryName: "Support Tickets",
   },
 ];
 
